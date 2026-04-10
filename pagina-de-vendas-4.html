@@ -848,4 +848,10 @@
     });
   }, { threshold: 0.1 });
 
-  document.querySelectorAll('.pain-item, .chapter-item
+  document.querySelectorAll('.pain-item, .chapter-item, .testi-card, .stat-item').forEach(el => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(20px)';
+    el.style.transition = 'opacity 0.5s, transform 0.5s';
+    observer.observe(el);
+  });
+</script>
