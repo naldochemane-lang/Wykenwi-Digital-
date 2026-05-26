@@ -1,0 +1,2100 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Aprender+ · App Educativo</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#10B981"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Aprender+"/>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    html,body{margin:0;padding:0;background:#030712;min-height:100vh;}
+    #root{min-height:100vh;}
+
+    /* ── Mascote bolha ── */
+    #mascote-bubble{
+      position:fixed;bottom:0;left:0;right:0;
+      z-index:9800;display:flex;align-items:flex-end;
+      justify-content:flex-start;padding:0 14px 18px;
+      pointer-events:none;
+      transform:translateY(140%);
+      transition:transform 0.38s cubic-bezier(.34,1.56,.64,1);
+    }
+    #mascote-bubble.visivel{transform:translateY(0);}
+    .mascote-inner{display:flex;align-items:flex-end;gap:8px;max-width:320px;}
+    .mascote-owl{font-size:2.4rem;flex-shrink:0;
+      filter:drop-shadow(0 4px 10px rgba(0,0,0,.3));
+      animation:mascBreathe 3s ease-in-out infinite;}
+    @keyframes mascBreathe{0%,100%{transform:scale(1) translateY(0)}50%{transform:scale(1.04) translateY(-6px)}}
+    .mascote-speech{
+      background:#fff;border:2.5px solid #A7F3D0;
+      border-radius:18px 18px 18px 4px;padding:10px 14px;
+      font-size:.88rem;font-weight:800;font-family:'Nunito',sans-serif;
+      color:#1C1917;line-height:1.4;
+      box-shadow:0 4px 0 #A7F3D0,0 6px 22px rgba(16,185,129,.2);
+      min-height:40px;display:flex;align-items:center;
+    }
+
+    /* ── Banner PWA instalar ── */
+    #pwa-banner{
+      position:fixed;bottom:0;left:0;right:0;z-index:9700;
+      background:linear-gradient(135deg,#10B981,#059669);
+      color:#fff;padding:14px 18px;
+      display:flex;align-items:center;gap:12px;
+      box-shadow:0 -4px 20px rgba(0,0,0,.2);
+      transform:translateY(100%);
+      transition:transform .4s cubic-bezier(.22,1,.36,1);
+      border-radius:20px 20px 0 0;
+    }
+    #pwa-banner.show{transform:translateY(0);}
+    #pwa-banner .pwa-icon{font-size:2rem;flex-shrink:0;}
+    #pwa-banner .pwa-text{flex:1;}
+    #pwa-banner .pwa-title{font-size:.95rem;font-weight:900;font-family:'Baloo 2',cursive;}
+    #pwa-banner .pwa-sub{font-size:.75rem;font-weight:600;opacity:.88;}
+    #pwa-banner .pwa-btn{background:#fff;color:#059669;border:none;border-radius:12px;
+      padding:9px 16px;font-size:.9rem;font-weight:900;font-family:'Nunito',sans-serif;
+      cursor:pointer;white-space:nowrap;flex-shrink:0;}
+    #pwa-banner .pwa-close{background:none;border:none;color:#fff;font-size:1.3rem;
+      cursor:pointer;flex-shrink:0;opacity:.8;padding:4px 6px;pointer-events:all;}
+  </style>
+</head>
+<body>
+  <!-- Mascote bolha global -->
+  <div id="mascote-bubble">
+    <div class="mascote-inner">
+      <span class="mascote-owl">🦉</span>
+      <div class="mascote-speech" id="mascote-txt"></div>
+    </div>
+  </div>
+
+  <!-- Banner PWA -->
+  <div id="pwa-banner">
+    <span class="pwa-icon">📲</span>
+    <div class="pwa-text">
+      <div class="pwa-title">Instalar Aprender+</div>
+      <div class="pwa-sub">Adiciona ao ecrã principal — funciona offline!</div>
+    </div>
+    <button class="pwa-btn" id="pwa-install-btn">Instalar</button>
+    <button class="pwa-close" id="pwa-close-btn">✕</button>
+  </div>
+
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+
+/* ═══════════════════════════════════════════════════════════════════
+   SOM MODULE — sons via AudioContext (sem ficheiros de áudio)
+═══════════════════════════════════════════════════════════════════ */
+const Som = (() => {
+  let _ctx = null;
+  const ctx = () => {
+    if (!_ctx) try { _ctx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e) {}
+    return _ctx;
+  };
+  const beep = (freq, type, dur, vol, delay=0) => {
+    const c = ctx(); if (!c) return;
+    const o = c.createOscillator(), g = c.createGain();
+    o.connect(g); g.connect(c.destination);
+    o.type = type; o.frequency.setValueAtTime(freq, c.currentTime + delay);
+    g.gain.setValueAtTime(vol, c.currentTime + delay);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + delay + dur);
+    o.start(c.currentTime + delay); o.stop(c.currentTime + delay + dur);
+  };
+  return {
+    acerto:   () => { beep(523,'sine',.12,.18); beep(784,'sine',.18,.15,.1); },
+    erro:     () => { beep(220,'triangle',.22,.16); beep(180,'triangle',.18,.12,.12); },
+    combo:    () => { [523,659,784,1047].forEach((f,i)=>beep(f,'sine',.18,.16,i*.07)); },
+    resultado:(s) => {
+      if(s>=3) [[523,0],[659,.09],[784,.18],[1047,.27],[1319,.36]].forEach(([f,d])=>beep(f,'sine',.28,.16,d));
+      else if(s>=2) [[523,0],[659,.1],[784,.2]].forEach(([f,d])=>beep(f,'sine',.22,.15,d));
+      else beep(330,'triangle',.4,.12);
+    },
+    xp: () => { beep(880,'sine',.1,.12); beep(1100,'sine',.12,.1,.08); },
+    virar: () => beep(440,'sine',.06,.1),
+    par:   () => { beep(660,'sine',.1,.14); beep(880,'sine',.14,.12,.08); },
+  };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════
+   MASCOTE MODULE — bolha de voz contextual
+═══════════════════════════════════════════════════════════════════ */
+const Mascote = (() => {
+  let _timer = null;
+  const falar = (msg, durMs=3200) => {
+    const bubble = document.getElementById('mascote-bubble');
+    const txt    = document.getElementById('mascote-txt');
+    if (!bubble || !txt) return;
+    clearTimeout(_timer);
+    txt.textContent = msg;
+    bubble.classList.add('visivel');
+    _timer = setTimeout(() => bubble.classList.remove('visivel'), durMs);
+  };
+  const msgs = {
+    acerto:   ['🌟 Muito bem!','✨ Correcto!','🎉 Óptimo!','👏 Excelente!','🔥 Fantástico!'],
+    erro:     ['💪 Quase! Tenta outra vez!','🤔 Não desistas!','😊 Pratica mais!'],
+    combo3:   ['🔥 COMBO ×3! Incrível!','⚡ Em chama! ×3!'],
+    combo6:   ['🌟 LENDÁRIO! Imparável!','🏆 Que jogador! Lendário!'],
+    resultado:['🎯 Jogo terminado! Bom trabalho!','🦉 Eu sabia que conseguias!'],
+    entrada:  ['👋 Olá! Pronto para aprender?','🦉 Vamos lá! Escolhe uma actividade!'],
+    nivel:    ['🚀 Novo nível desbloqueado!','⭐ Subiste de nível! Parabéns!'],
+  };
+  const rand = arr => arr[Math.floor(Math.random()*arr.length)];
+  return {
+    acerto:    () => falar(rand(msgs.acerto), 2200),
+    erro:      () => falar(rand(msgs.erro), 2800),
+    combo:     (n) => falar(rand(n>=6?msgs.combo6:msgs.combo3), 2000),
+    resultado: () => falar(rand(msgs.resultado), 3500),
+    entrada:   () => falar(rand(msgs.entrada), 3000),
+    nivel:     () => falar(rand(msgs.nivel), 3000),
+    custom:    (m, d) => falar(m, d),
+  };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════
+   DADOS MODULE — persistência em localStorage
+═══════════════════════════════════════════════════════════════════ */
+const Dados = (() => {
+  const KEY = 'aprender_plus_v1';
+  const def = () => ({ xp: 0, streak: 0, lastDay: null, mundos: {}, perfil: '', avatar: '🦉', faixa: 'young' });
+
+  const load = () => {
+    try {
+      const raw = localStorage.getItem(KEY);
+      return raw ? { ...def(), ...JSON.parse(raw) } : def();
+    } catch { return def(); }
+  };
+
+  const save = (data) => {
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
+  };
+
+  const calcStreak = (data) => {
+    const now = Date.now();
+    const last = data.lastDay || 0;
+    const diffDias = Math.floor((now - last) / (1000*60*60*24));
+    if (!data.lastDay)       return { streak: 1, lastDay: now };
+    if (diffDias === 0)      return { streak: data.streak, lastDay: data.lastDay };
+    if (diffDias === 1)      return { streak: data.streak + 1, lastDay: now };
+    return                          { streak: 1, lastDay: now };
+  };
+
+  return { load, save, calcStreak };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════
+   PWA MODULE — instalar como app
+═══════════════════════════════════════════════════════════════════ */
+(() => {
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    const alreadyDismissed = localStorage.getItem('aprender_pwa_dismissed');
+    if (!alreadyDismissed) {
+      setTimeout(() => document.getElementById('pwa-banner')?.classList.add('show'), 4000);
+    }
+  });
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('pwa-install-btn')?.addEventListener('click', async () => {
+      document.getElementById('pwa-banner')?.classList.remove('show');
+      if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; }
+    });
+    document.getElementById('pwa-close-btn')?.addEventListener('click', () => {
+      document.getElementById('pwa-banner')?.classList.remove('show');
+      localStorage.setItem('aprender_pwa_dismissed', '1');
+    });
+  });
+})();
+
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   APRENDER+ — App Educativo para Crianças
+   Faixas: 🌱 4–6 anos (Pequeninos) | 🚀 7–8 anos (Exploradores)
+═══════════════════════════════════════════════════════════════════ */
+
+const shuffle = a => { const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];} return b; };
+const rand = (mn,mx) => Math.floor(Math.random()*(mx-mn+1))+mn;
+const falar = (txt,rate=0.80) => { if(!window.speechSynthesis)return; window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(txt); u.lang='pt-PT'; u.rate=rate; u.onerror=()=>{}; window.speechSynthesis.speak(u); };
+
+/* ── FAIXAS ETÁRIAS ── */
+const FAIXAS = {
+  young: {
+    id:'young', label:'4–6 anos', emoji:'🌱', nome:'Pequeninos',
+    cor:'#10B981', sombra:'#047857', light:'#ECFDF5',
+    desc:'Letras, números e primeiras palavras',
+    mascote:'🐣', mascoteNome:'Pintinho',
+    fonteExtra: 1.15,   // escala de fonte maior
+    maxXpNivel: 60,      // menos XP por nível (mais fácil de subir)
+    tag:'Fácil',
+  },
+  older: {
+    id:'older', label:'7–8 anos', emoji:'🚀', nome:'Exploradores',
+    cor:'#6366F1', sombra:'#3730A3', light:'#EEF2FF',
+    desc:'Palavras, frases, cálculo e calendário',
+    mascote:'🦅', mascoteNome:'Águia',
+    fonteExtra: 1.0,
+    maxXpNivel: 100,
+    tag:'Desafio',
+  },
+};
+
+/* ── MUNDOS POR FAIXA ── */
+const MUNDOS_YOUNG = [
+  {id:'abc',      nome:'ABC',          emoji:'🔤', cor:'#EC4899', sombra:'#9D174D', desc:'Letras e sons',         max:15},
+  {id:'vogais',   nome:'Vogais',       emoji:'🔵', cor:'#8B5CF6', sombra:'#5B21B6', desc:'A · E · I · O · U',     max:15},
+  {id:'numeros',  nome:'Números',      emoji:'🔢', cor:'#F59E0B', sombra:'#B45309', desc:'Contar até 10',          max:15},
+  {id:'cores',    nome:'Cores',        emoji:'🎨', cor:'#EF4444', sombra:'#991B1B', desc:'Aprende as cores',       max:15},
+  {id:'formas',   nome:'Formas',       emoji:'🔺', cor:'#10B981', sombra:'#047857', desc:'Formas geométricas',     max:15},
+  {id:'memoria',  nome:'Memória',      emoji:'🧠', cor:'#0EA5E9', sombra:'#0174A8', desc:'Encontra os pares',      max:15},
+];
+
+const MUNDOS_OLDER = [
+  {id:'leitura',    nome:'Leitura',      emoji:'📖', cor:'#0EA5E9', sombra:'#0174A8', desc:'Palavras e frases',       max:20},
+  {id:'soletrar',   nome:'Soletrar',     emoji:'🔡', cor:'#8B5CF6', sombra:'#5B21B6', desc:'Ordena as letras',         max:20},
+  {id:'matematica', nome:'Matemática',   emoji:'🧮', cor:'#F59E0B', sombra:'#B45309', desc:'Somar e subtrair',         max:20},
+  {id:'calendario', nome:'Calendário',   emoji:'📅', cor:'#10B981', sombra:'#047857', desc:'Dias, meses e horas',      max:20},
+  {id:'diferente',  nome:'O Intruso',    emoji:'🔍', cor:'#EF4444', sombra:'#991B1B', desc:'Qual é o diferente?',      max:20},
+  {id:'memoria2',   nome:'Memória',      emoji:'🧠', cor:'#EC4899', sombra:'#9D174D', desc:'Pares difíceis',           max:20},
+];
+
+/* ══════════════════════════════════════
+   DADOS DOS JOGOS — YOUNG (4–6)
+══════════════════════════════════════ */
+const D_YOUNG = {
+  abc: [
+    {letra:'A',emoji:'🍍',palavra:'Abacaxi'},{letra:'B',emoji:'🎈',palavra:'Balão'},
+    {letra:'C',emoji:'🏠',palavra:'Casa'},   {letra:'D',emoji:'🦷',palavra:'Dente'},
+    {letra:'E',emoji:'🐘',palavra:'Elefante'},{letra:'F',emoji:'🌸',palavra:'Flor'},
+    {letra:'G',emoji:'🦒',palavra:'Girafa'}, {letra:'I',emoji:'🏝️',palavra:'Ilha'},
+    {letra:'L',emoji:'🦁',palavra:'Leão'},   {letra:'M',emoji:'🍎',palavra:'Maçã'},
+    {letra:'N',emoji:'☁️',palavra:'Nuvem'},  {letra:'O',emoji:'🐑',palavra:'Ovelha'},
+    {letra:'P',emoji:'🐦',palavra:'Pássaro'},{letra:'R',emoji:'🐭',palavra:'Rato'},
+    {letra:'S',emoji:'☀️',palavra:'Sol'},    {letra:'T',emoji:'🐢',palavra:'Tartaruga'},
+    {letra:'V',emoji:'🐄',palavra:'Vaca'},
+  ],
+  vogais: [
+    {letra:'A',emoji:'🍍',dica:'A de Abacaxi'},
+    {letra:'E',emoji:'🐘',dica:'E de Elefante'},
+    {letra:'I',emoji:'🏝️',dica:'I de Ilha'},
+    {letra:'O',emoji:'🐑',dica:'O de Ovelha'},
+    {letra:'U',emoji:'🍇',dica:'U de Uva'},
+  ],
+  numeros: [
+    {n:1,emoji:'🍎',itens:['🍎']},
+    {n:2,emoji:'⭐',itens:['⭐','⭐']},
+    {n:3,emoji:'🐸',itens:['🐸','🐸','🐸']},
+    {n:4,emoji:'🌸',itens:['🌸','🌸','🌸','🌸']},
+    {n:5,emoji:'🦁',itens:['🦁','🦁','🦁','🦁','🦁']},
+    {n:6,emoji:'🐟',itens:['🐟','🐟','🐟','🐟','🐟','🐟']},
+    {n:7,emoji:'🍌',itens:['🍌','🍌','🍌','🍌','🍌','🍌','🍌']},
+    {n:8,emoji:'🌈',itens:['🌈','🌈','🌈','🌈','🌈','🌈','🌈','🌈']},
+    {n:9,emoji:'🦋',itens:['🦋','🦋','🦋','🦋','🦋','🦋','🦋','🦋','🦋']},
+    {n:10,emoji:'🍓',itens:['🍓','🍓','🍓','🍓','🍓','🍓','🍓','🍓','🍓','🍓']},
+  ],
+  cores: [
+    {nome:'Vermelho',emoji:'🔴',hex:'#EF4444'},
+    {nome:'Azul',   emoji:'🔵',hex:'#3B82F6'},
+    {nome:'Verde',  emoji:'🟢',hex:'#10B981'},
+    {nome:'Amarelo',emoji:'🟡',hex:'#FACC15'},
+    {nome:'Rosa',   emoji:'🩷',hex:'#EC4899'},
+    {nome:'Laranja',emoji:'🟠',hex:'#F97316'},
+  ],
+  formas: [
+    {nome:'Círculo',   emoji:'⭕', svg:'circle'},
+    {nome:'Triângulo', emoji:'🔺', svg:'triangle'},
+    {nome:'Quadrado',  emoji:'🟦', svg:'square'},
+    {nome:'Coração',   emoji:'❤️', svg:'heart'},
+    {nome:'Estrela',   emoji:'⭐', svg:'star'},
+  ],
+  memoria: [
+    {id:1,emoji:'🐱'},{id:2,emoji:'🐶'},{id:3,emoji:'🐸'},{id:4,emoji:'🦄'},
+    {id:5,emoji:'🐨'},{id:6,emoji:'🐮'},
+  ],
+};
+
+/* ══════════════════════════════════════
+   DADOS DOS JOGOS — OLDER (7–8)
+══════════════════════════════════════ */
+const D_OLDER = {
+  leitura: {
+    palavras:[
+      {t:'borboleta',emoji:'🦋'},{t:'elefante',emoji:'🐘'},{t:'guitarra',emoji:'🎸'},
+      {t:'tartaruga',emoji:'🐢'},{t:'pássaro',emoji:'🐦'},{t:'cogumelo',emoji:'🍄'},
+      {t:'floresta',emoji:'🌲'},{t:'sereia',emoji:'🧜'},{t:'chapéu',emoji:'🎩'},
+    ],
+    lacunas:[
+      {frase:'O sol nasce de ___.', certa:'manhã',    opcs:['manhã','noite','tarde','chuva']},
+      {frase:'A ___ voa no céu.',   certa:'borboleta', opcs:['borboleta','pedra','mesa','banana']},
+      {frase:'O ___ ladra forte.',  certa:'cão',       opcs:['cão','leão','peixe','livro']},
+      {frase:'A menina come uma ___.', certa:'maçã',   opcs:['maçã','cadeira','lápis','janela']},
+      {frase:'O livro está na ___.', certa:'mesa',     opcs:['mesa','nuvem','rio','floresta']},
+      {frase:'A ___ brilha à noite.',certa:'lua',      opcs:['lua','areia','chuva','vento']},
+      {frase:'O ___ mora no mar.',   certa:'peixe',    opcs:['peixe','gato','lápis','chapéu']},
+      {frase:'A criança bebe ___.', certa:'água',      opcs:['água','pedra','areia','madeira']},
+    ],
+  },
+  soletrar:[
+    {t:'borboleta',emoji:'🦋'},{t:'elefante',emoji:'🐘'},{t:'guitarra',emoji:'🎸'},
+    {t:'tartaruga',emoji:'🐢'},{t:'chapéu',emoji:'🎩'},{t:'pássaro',emoji:'🐦'},
+    {t:'floresta',emoji:'🌲'},{t:'cogumelo',emoji:'🍄'},{t:'sereia',emoji:'🧜'},
+  ],
+  matematica:{
+    adicao:()=>{const a=rand(1,15),b=rand(1,15);return{a,b,op:'+',res:a+b};},
+    subtracao:()=>{const a=rand(5,15),b=rand(1,a-1);return{a,b,op:'-',res:a-b};},
+    mult:()=>{const a=rand(2,5),b=rand(2,5);return{a,b,op:'×',res:a*b};},
+  },
+  dias:['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'],
+  meses:['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'],
+  diferente:[
+    {grupo:['🍎','🍊','🍌','🚗'],  certo:'🚗',  dica:'3 frutas + 1 veículo'},
+    {grupo:['🐶','🐱','🐹','📚'],  certo:'📚',  dica:'3 animais de estimação + 1 livro'},
+    {grupo:['✏️','📏','📐','🎵'],  certo:'🎵',  dica:'3 materiais escolares + 1 nota musical'},
+    {grupo:['🔴','🔵','🟢','⭐'],  certo:'⭐',  dica:'3 círculos coloridos + 1 estrela'},
+    {grupo:['🍕','🍔','🌮','🎸'],  certo:'🎸',  dica:'3 comidas + 1 instrumento musical'},
+    {grupo:['⚽','🏀','🎾','🎹'],  certo:'🎹',  dica:'3 bolas de desporto + 1 teclado'},
+    {grupo:['🌧️','⛈️','🌨️','☀️'], certo:'☀️', dica:'3 tipos de chuva/frio + 1 sol'},
+  ],
+  memoria:[
+    {id:1,emoji:'🦁'},{id:2,emoji:'🐸'},{id:3,emoji:'🦊'},{id:4,emoji:'🐨'},
+    {id:5,emoji:'🐯'},{id:6,emoji:'🦄'},{id:7,emoji:'🐮'},{id:8,emoji:'🐧'},
+  ],
+};
+
+/* ══════════════════════════════════════
+   COMPONENTES BASE
+══════════════════════════════════════ */
+
+function ProgressBar({valor,max,cor,h=10}){
+  const pct=Math.min(100,(valor/Math.max(max,1))*100);
+  return(
+    <div style={{background:'rgba(0,0,0,.12)',borderRadius:99,height:h,overflow:'hidden'}}>
+      <div style={{height:'100%',borderRadius:99,
+        background:`linear-gradient(90deg,${cor},${cor}bb)`,
+        width:`${pct}%`,transition:'width .55s cubic-bezier(.34,1.56,.64,1)',
+        boxShadow:`0 0 8px ${cor}66`}}/>
+    </div>
+  );
+}
+
+function Particulas({ativo}){
+  if(!ativo)return null;
+  return(
+    <div style={{position:'fixed',inset:0,pointerEvents:'none',zIndex:9999,overflow:'hidden'}}>
+      {Array.from({length:20},(_,i)=>(
+        <span key={i} style={{position:'absolute',
+          left:`${rand(5,95)}%`,top:'65%',fontSize:'1.5rem',
+          animation:`particleUp ${800+rand(0,500)}ms ease-out ${i*55}ms both`}}>
+          {['⭐','🌟','✨','🎉','💫','🏆','🌈'][i%7]}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function XpBurst({val,show}){
+  if(!show)return null;
+  return(
+    <div style={{position:'fixed',top:'36%',left:'50%',zIndex:9000,pointerEvents:'none',
+      transform:'translate(-50%,-50%)',
+      animation:'xpBurst 1.1s cubic-bezier(.34,1.56,.64,1) forwards',
+      background:'linear-gradient(135deg,#FBBF24,#F59E0B)',color:'#fff',
+      borderRadius:20,padding:'10px 24px',
+      fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.4rem',
+      boxShadow:'0 8px 0 #B45309,0 12px 40px rgba(245,158,11,.6)'}}>
+      +{val} XP ⭐
+    </div>
+  );
+}
+
+function ComboBadge({count,faixa}){
+  if(count<2)return null;
+  const cor=faixa==='young'?'#10B981':'#6366F1';
+  const sombra=faixa==='young'?'#047857':'#3730A3';
+  return(
+    <div style={{position:'fixed',top:'40%',left:'50%',zIndex:8900,pointerEvents:'none',
+      transform:'translate(-50%,-50%)',
+      animation:'comboPop 1.35s cubic-bezier(.34,1.56,.64,1) forwards',
+      background:count>=6?'linear-gradient(135deg,#8B5CF6,#EC4899,#F59E0B)':`linear-gradient(135deg,${cor},${sombra})`,
+      color:'#fff',borderRadius:24,padding:'12px 28px',whiteSpace:'nowrap',
+      fontFamily:"'Baloo 2',cursive",fontWeight:900,
+      fontSize:count>=6?'1.9rem':'1.5rem',
+      boxShadow:'0 8px 0 rgba(0,0,0,.3)'}}>
+      {count>=6?`🌟 LENDÁRIO ×${count}!`:`🔥 COMBO ×${count}!`}
+    </div>
+  );
+}
+
+/* Feedback colorido */
+function FbBox({fb}){
+  if(!fb)return null;
+  const ok=fb.tipo==='certo';
+  return(
+    <div style={{background:ok?'#ECFDF5':'#FEF2F2',
+      border:`2px solid ${ok?'#A7F3D0':'#FECACA'}`,
+      borderRadius:14,padding:'10px 16px',textAlign:'center',
+      fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'.92rem',
+      color:ok?'#065F46':'#991B1B',animation:'popIn .3s ease'}}>
+      {fb.msg}
+    </div>
+  );
+}
+
+/* Botão de escolha adaptável */
+function BotaoOp({texto,onClick,disabled,correto,errado,neutro,cor,sombra,fontSize='1rem',padding='14px 10px'}){
+  const [p,setP]=useState(false);
+  const bg=correto?'#10B981':errado?'#EF4444':'#fff';
+  const bd=correto?'#065F46':errado?'#991B1B':neutro?cor:'#E2E8F0';
+  const sh=correto?'#047857':errado?'#7F1D1D':neutro?sombra:'#D1D5DB';
+  return(
+    <button disabled={disabled}
+      onPointerDown={()=>setP(true)}
+      onPointerUp={()=>{setP(false);if(!disabled){Som.acerto&&Som.acerto();onClick?.();}}}
+      onPointerLeave={()=>setP(false)}
+      style={{background:bg,border:`2.5px solid ${bd}`,borderRadius:16,padding,
+        fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize,
+        color:correto||errado?'#fff':'#1C1917',cursor:disabled?'not-allowed':'pointer',
+        boxShadow:p?`0 2px 0 ${sh}`:`0 5px 0 ${sh}`,
+        transform:p?'translateY(3px)':'none',
+        transition:'transform .1s,box-shadow .1s,background .25s,border-color .25s',
+        width:'100%',textAlign:'center',
+        animation:correto?'correctPop .35s ease':errado?'shake .35s ease':'none'}}>
+      {texto}
+    </button>
+  );
+}
+
+function Estrelas({pontos,total}){
+  const pct=pontos/total;
+  const n=pct>=.9?3:pct>=.6?2:pct>=.3?1:0;
+  return(
+    <div style={{display:'flex',gap:8,justifyContent:'center',fontSize:'2.8rem'}}>
+      {[0,1,2].map(i=>(
+        <span key={i} style={{
+          filter:i<n?'drop-shadow(0 3px 8px rgba(245,158,11,.6))':'grayscale(1) opacity(.22)',
+          animation:i<n?`starPop .5s cubic-bezier(.34,1.56,.64,1) ${i*.18}s both`:'none'}}>⭐</span>
+      ))}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════
+   ECRÃ RESULTADO (universal)
+══════════════════════════════════════ */
+function Resultado({pontos,total,xpGanho,cor,sombra,faixa,onRepetir,onMenu}){
+  const pct=Math.round((pontos/Math.max(total,1))*100);
+  const stars=pct>=90?3:pct>=60?2:pct>=30?1:0;
+  const emoji=['🤔','💪','🌟','🏆'][stars];
+  const msg=['Não desistas!','Bom esforço!','Muito bem!','Perfeito!'][stars];
+  useEffect(()=>{
+    Som.resultado(stars);
+    setTimeout(()=>{
+      Mascote.resultado();
+      if(stars>=2) falar(msg,.9);
+    },400);
+  },[]);
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',
+      justifyContent:'center',padding:'24px 20px',
+      background:'linear-gradient(160deg,#FFFBEB,#FEF9C3,#FEF08A)',gap:12}}>
+      <div style={{fontSize:'5rem',animation:'popIn .55s cubic-bezier(.34,1.56,.64,1)',
+        filter:'drop-shadow(0 8px 18px rgba(0,0,0,.18))'}}>{emoji}</div>
+      <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+        fontSize: faixa==='young'?'2rem':'1.75rem',
+        color:'#FF6B2B',textAlign:'center'}}>{msg}</div>
+      <Estrelas pontos={pontos} total={total}/>
+      <div style={{background:'linear-gradient(135deg,#FBBF24,#F59E0B)',borderRadius:16,
+        padding:'10px 24px',fontFamily:"'Baloo 2',cursive",fontWeight:900,
+        fontSize: faixa==='young'?'1.3rem':'1.1rem',color:'#fff',
+        boxShadow:'0 5px 0 #B45309',animation:'xpBurst .6s .3s cubic-bezier(.34,1.56,.64,1) both'}}>
+        +{xpGanho} XP! ⭐
+      </div>
+      <div style={{fontFamily:'Nunito,sans-serif',fontWeight:800,color:'#92807A',
+        fontSize:faixa==='young'?'1rem':'.9rem'}}>
+        {pontos}/{total} correctas · {pct}%
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:4}}>
+        {Array.from({length:total}).map((_,i)=>(
+          <div key={i} style={{width:faixa==='young'?24:20,height:faixa==='young'?24:20,
+            borderRadius:'50%',background:i<pontos?'#10B981':'#FCA5A5',
+            boxShadow:i<pontos?'0 3px 0 #047857':'0 3px 0 #991B1B'}}/>
+        ))}
+      </div>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',justifyContent:'center'}}>
+        <button onClick={onRepetir} style={{background:'#fff',border:`2.5px solid ${cor}`,
+          borderRadius:14,padding: faixa==='young'?'12px 22px':'10px 18px',
+          fontFamily:"'Baloo 2',cursive",fontWeight:900,
+          color:cor,fontSize:faixa==='young'?'1.05rem':'.95rem',cursor:'pointer',
+          boxShadow:`0 4px 0 ${sombra}33`}}>🔁 Repetir</button>
+        <button onClick={onMenu} style={{background:'#fff',border:'2.5px solid #E2E8F0',
+          borderRadius:14,padding: faixa==='young'?'12px 20px':'10px 16px',
+          fontFamily:"'Baloo 2',cursive",fontWeight:900,
+          color:'#64748B',fontSize:faixa==='young'?'1.05rem':'.9rem',cursor:'pointer',
+          boxShadow:'0 4px 0 #E2E8F0'}}>← Menu</button>
+      </div>
+    </div>
+  );
+}
+
+/* Header do jogo (progressão) */
+function GameHeader({titulo,emoji,cor,sombra,idx,total,combo,faixa,onMenu}){
+  return(
+    <div style={{background:`linear-gradient(135deg,${cor},${sombra})`,
+      padding:`${faixa==='young'?14:12}px 14px ${faixa==='young'?16:14}px`,
+      flexShrink:0,boxShadow:`0 6px 0 ${sombra}55`}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <button onClick={onMenu} style={{background:'rgba(255,255,255,.22)',border:'none',
+            borderRadius:10,width:faixa==='young'?36:32,height:faixa==='young'?36:32,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            cursor:'pointer',fontSize:faixa==='young'?'1.1rem':'1rem',color:'#fff'}}>←</button>
+          <span style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+            fontSize:faixa==='young'?'1.05rem':'.95rem',color:'#fff'}}>
+            {emoji} {titulo}
+          </span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          {combo>=2&&<span style={{background:'rgba(255,255,255,.25)',borderRadius:10,
+            padding:'2px 9px',fontFamily:"'Baloo 2',cursive",fontWeight:900,
+            fontSize:faixa==='young'?'.9rem':'.78rem',color:'#fff'}}>🔥×{combo}</span>}
+          <span style={{background:'rgba(255,255,255,.2)',color:'#fff',borderRadius:10,
+            padding:'2px 10px',fontFamily:'Nunito,sans-serif',fontWeight:900,
+            fontSize:faixa==='young'?'.85rem':'.78rem'}}>{idx+1}/{total}</span>
+        </div>
+      </div>
+      <div style={{background:'rgba(0,0,0,.15)',borderRadius:99,height:faixa==='young'?10:8,overflow:'hidden'}}>
+        <div style={{height:'100%',borderRadius:99,background:'rgba(255,255,255,.85)',
+          width:`${(idx/total)*100}%`,transition:'width .5s cubic-bezier(.34,1.56,.64,1)'}}/>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   JOGOS — FAIXA YOUNG (4–6 anos)
+═══════════════════════════════════════════════════════════════════ */
+
+/* JOGO Y1 — ABC */
+function JogoABC_Young({onFim,onXp,faixa}){
+  const [pool]=useState(()=>shuffle([...D_YOUNG.abc]).slice(0,5));
+  const [idx,setIdx]=useState(0);
+  const [fb,setFb]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const [opts,setOpts]=useState([]);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{
+    const it=pool[idx]; if(!it)return;
+    const outros=D_YOUNG.abc.filter(x=>x.letra!==it.letra).map(x=>x.letra);
+    setOpts(shuffle([it.letra,...shuffle(outros).slice(0,2)])); // 3 opções para young
+    setFb(null);
+    setTimeout(()=>falar(it.palavra,.7),250);
+  },[idx]);
+
+  if(done)return<Resultado pontos={pts} total={pool.length} xpGanho={pts*10+combo*4}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const it=pool[idx];
+  const resp=(op)=>{
+    if(fb)return;
+    const ok=op===it.letra;
+    setFb({tipo:ok?'certo':'errado',msg:ok?`🌟 ${it.letra} de ${it.palavra}!`:`❌ Era a letra ${it.letra}!`});
+    if(ok){setPts(p=>p+1);setCombo(c=>c+1);onXp(10);}else setCombo(0);
+    setTimeout(()=>{idx+1>=pool.length?setDone(true):setIdx(prev=>prev+1);},1700);
+  };
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#FFF3E8',overflow:'hidden'}}>
+      <GameHeader titulo="Aprende o ABC" emoji="🔤"
+        cor={F.cor} sombra={F.sombra} idx={idx} total={pool.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'16px 14px 24px',display:'flex',flexDirection:'column',gap:14}}>
+        {/* emoji grande + letra */}
+        <div style={{textAlign:'center',padding:'8px 0'}}>
+          <div style={{fontSize:'6.5rem',lineHeight:1,marginBottom:8,
+            animation:'mascotBreathe 3s ease-in-out infinite',
+            filter:'drop-shadow(0 6px 14px rgba(0,0,0,.15))'}}>
+            {it.emoji}
+          </div>
+          <button onClick={()=>falar(it.palavra,.7)} style={{
+            background:F.light,border:'none',borderRadius:14,
+            padding:'8px 20px',fontFamily:'Nunito,sans-serif',fontWeight:800,
+            fontSize:'1rem',color:F.sombra,cursor:'pointer',
+            boxShadow:`0 4px 0 ${F.cor}33`}}>
+            🔊 {it.palavra}
+          </button>
+        </div>
+        <p style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'1rem',
+          color:'#6B7280',textAlign:'center'}}>
+          Qual é a letra desta palavra? 👇
+        </p>
+        {/* 3 botões grandes para young */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+          {opts.map(op=>(
+            <BotaoOp key={op} texto={op}
+              correto={fb&&op===it.letra} errado={fb?.tipo==='errado'&&op!==it.letra&&false}
+              neutro={!fb} cor={F.cor} sombra={F.sombra}
+              fontSize='2rem' padding='18px 8px'
+              disabled={!!fb} onClick={()=>resp(op)}/>
+          ))}
+        </div>
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO Y2 — Vogais */
+function JogoVogais_Young({onFim,onXp,faixa}){
+  const [pool]=useState(()=>shuffle([...D_YOUNG.vogais]).slice(0,5));
+  const [idx,setIdx]=useState(0);
+  const [fb,setFb]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{setFb(null);setTimeout(()=>falar(pool[idx]?.letra,.65),200);},[idx]);
+
+  if(done)return<Resultado pontos={pts} total={pool.length} xpGanho={pts*10+combo*4}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const it=pool[idx];
+  const todasVogais=['A','E','I','O','U'];
+  const opts=shuffle(todasVogais);
+
+  const resp=(op)=>{
+    if(fb)return;
+    const ok=op===it.letra;
+    setFb({tipo:ok?'certo':'errado',msg:ok?`🌟 ${it.dica}!`:`❌ Era a vogal ${it.letra}!`});
+    if(ok){setPts(p=>p+1);setCombo(c=>c+1);onXp(10);}else setCombo(0);
+    setTimeout(()=>{idx+1>=pool.length?setDone(true):setIdx(prev=>prev+1);},1700);
+  };
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#EDE9FE',overflow:'hidden'}}>
+      <GameHeader titulo="Vogais" emoji="🔵"
+        cor="#8B5CF6" sombra="#5B21B6" idx={idx} total={pool.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'16px 14px 20px',display:'flex',flexDirection:'column',justifyContent:'space-between',gap:10}}>
+        <div style={{textAlign:'center'}}>
+          <div style={{fontSize:'8rem',lineHeight:1,marginBottom:8,
+            animation:'mascotBreathe 3s ease-in-out infinite'}}>{it.emoji}</div>
+          <p style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'1.05rem',color:'#5B21B6'}}>
+            {it.dica}
+          </p>
+        </div>
+        <p style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'1rem',
+          color:'#6B7280',textAlign:'center'}}>Qual é a vogal? 👇</p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
+          {opts.map(op=>(
+            <button key={op} disabled={!!fb} onClick={()=>resp(op)}
+              style={{
+                padding:'18px 4px',borderRadius:16,border:'none',cursor:fb?'default':'pointer',
+                fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.9rem',
+                background:fb&&op===it.letra?'#8B5CF6':fb&&op!==it.letra?'#F3F4F6':'linear-gradient(135deg,#8B5CF6,#6D28D9)',
+                color:fb&&op===it.letra?'#fff':fb&&op!==it.letra?'#CBD5E1':'#fff',
+                boxShadow:fb?'none':'0 5px 0 #5B21B6',
+                transition:'all .2s',
+                animation:fb&&op===it.letra?'correctPop .35s ease':'none',
+              }}>{op}</button>
+          ))}
+        </div>
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO Y3 — Números (contar) */
+function JogoNumeros_Young({onFim,onXp,faixa}){
+  const [pool]=useState(()=>shuffle([...D_YOUNG.numeros]).slice(0,5));
+  const [idx,setIdx]=useState(0);
+  const [fb,setFb]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{setFb(null);setTimeout(()=>falar(`Quantos ${pool[idx]?.emoji} há?`,.75),200);},[idx]);
+
+  if(done)return<Resultado pontos={pts} total={pool.length} xpGanho={pts*10+combo*4}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const it=pool[idx];
+  const todos=D_YOUNG.numeros.map(x=>x.n);
+  const errados=shuffle(todos.filter(n=>n!==it.n)).slice(0,2);
+  const opts=shuffle([it.n,...errados]);
+
+  const resp=(op)=>{
+    if(fb)return;
+    const ok=op===it.n;
+    setFb({tipo:ok?'certo':'errado',msg:ok?`🌟 Correcto! São ${it.n}!`:`❌ São ${it.n}!`});
+    if(ok){setPts(p=>p+1);setCombo(c=>c+1);onXp(10);}else setCombo(0);
+    setTimeout(()=>{idx+1>=pool.length?setDone(true):setIdx(prev=>prev+1);},1700);
+  };
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#FFFBEB',overflow:'hidden'}}>
+      <GameHeader titulo="Números" emoji="🔢"
+        cor="#F59E0B" sombra="#B45309" idx={idx} total={pool.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'16px 14px 24px',display:'flex',flexDirection:'column',gap:14}}>
+        <p style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'1.1rem',
+          color:'#92400E',textAlign:'center'}}>Quantos há? Conta! 👆</p>
+        {/* grid de emojis para contar */}
+        <div style={{background:'#FEF3C7',borderRadius:20,border:'2.5px solid #FDE68A',
+          padding:'16px',display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',
+          boxShadow:'0 6px 0 #FDE68A55'}}>
+          {it.itens.map((em,i)=>(
+            <span key={i} style={{fontSize:'2.8rem',
+              animation:`popIn .3s ease ${i*80}ms both`}}>{em}</span>
+          ))}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+          {opts.map(op=>(
+            <BotaoOp key={op} texto={String(op)}
+              correto={!!fb&&op===it.n} errado={!!fb&&op!==it.n&&fb.tipo==='errado'}
+              neutro={!fb} cor="#F59E0B" sombra="#B45309"
+              fontSize='2.2rem' padding='18px 8px'
+              disabled={!!fb} onClick={()=>resp(op)}/>
+          ))}
+        </div>
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO Y4 — Cores */
+function JogoCores_Young({onFim,onXp,faixa}){
+  const [pool]=useState(()=>shuffle([...D_YOUNG.cores]).slice(0,5));
+  const [idx,setIdx]=useState(0);
+  const [fb,setFb]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{setFb(null);setTimeout(()=>falar(`Que cor é esta?`,.75),200);},[idx]);
+
+  if(done)return<Resultado pontos={pts} total={pool.length} xpGanho={pts*10+combo*4}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const it=pool[idx];
+  const erradas=shuffle(D_YOUNG.cores.filter(c=>c.nome!==it.nome)).slice(0,2);
+  const opts=shuffle([it,...erradas]);
+
+  const resp=(op)=>{
+    if(fb)return;
+    const ok=op.nome===it.nome;
+    setFb({tipo:ok?'certo':'errado',msg:ok?`🌟 ${it.nome}! Correcto!`:`❌ Era ${it.nome}!`});
+    if(ok){setPts(p=>p+1);setCombo(c=>c+1);onXp(10);}else setCombo(0);
+    setTimeout(()=>{idx+1>=pool.length?setDone(true):setIdx(prev=>prev+1);},1700);
+  };
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#FFF',overflow:'hidden'}}>
+      <GameHeader titulo="Cores" emoji="🎨"
+        cor="#EF4444" sombra="#991B1B" idx={idx} total={pool.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'16px 14px 20px',display:'flex',flexDirection:'column',justifyContent:'space-between',gap:10}}>
+        <p style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'1.1rem',
+          color:'#6B7280',textAlign:'center'}}>Que cor é esta? 🎨</p>
+        {/* círculo grande da cor */}
+        <div style={{display:'flex',justifyContent:'center'}}>
+          <div style={{width:150,height:150,borderRadius:'50%',background:it.hex,
+            boxShadow:`0 12px 0 ${it.hex}88,0 16px 40px ${it.hex}55`,
+            animation:'mascotBreathe 3s ease-in-out infinite',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:'4rem'}}>
+            {it.emoji}
+          </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+          {opts.map(op=>(
+            <button key={op.nome} disabled={!!fb} onClick={()=>resp(op)}
+              style={{
+                background:fb&&op.nome===it.nome?it.hex:fb?'#F1F5F9':'#fff',
+                border:`3px solid ${fb&&op.nome===it.nome?it.hex:'#E2E8F0'}`,
+                borderRadius:16,padding:'16px 6px',
+                fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1rem',
+                color:fb&&op.nome===it.nome?'#fff':'#1C1917',
+                cursor:fb?'default':'pointer',
+                boxShadow:fb?'none':'0 5px 0 #E2E8F0',transition:'all .2s',textAlign:'center',
+                animation:fb&&op.nome===it.nome?'correctPop .35s ease':'none',
+              }}>
+              <div style={{fontSize:'1.8rem',marginBottom:4}}>{op.emoji}</div>
+              {op.nome}
+            </button>
+          ))}
+        </div>
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO Y5 — Formas Geométricas */
+function JogoFormas_Young({onFim,onXp,faixa}){
+  const [pool]=useState(()=>shuffle([...D_YOUNG.formas]).slice(0,5));
+  const [idx,setIdx]=useState(0);
+  const [fb,setFb]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{setFb(null);setTimeout(()=>falar(`Que forma é esta?`,.75),200);},[idx]);
+
+  if(done)return<Resultado pontos={pts} total={pool.length} xpGanho={pts*10+combo*4}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const it=pool[idx];
+  const erradas=shuffle(D_YOUNG.formas.filter(f=>f.nome!==it.nome)).slice(0,2);
+  const opts=shuffle([it,...erradas]);
+
+  const svgForma=(svg,cor='#6366F1')=>{
+    if(svg==='circle')    return<svg viewBox="0 0 100 100" style={{width:'100%',height:'100%'}}><circle cx="50" cy="50" r="42" fill={cor}/></svg>;
+    if(svg==='triangle')  return<svg viewBox="0 0 100 100" style={{width:'100%',height:'100%'}}><polygon points="50,8 95,92 5,92" fill={cor}/></svg>;
+    if(svg==='square')    return<svg viewBox="0 0 100 100" style={{width:'100%',height:'100%'}}><rect x="8" y="8" width="84" height="84" rx="8" fill={cor}/></svg>;
+    if(svg==='heart')     return<svg viewBox="0 0 100 100" style={{width:'100%',height:'100%'}}><path d="M50,85 C20,65 5,48 5,32 A22,22,0,0,1,50,22 A22,22,0,0,1,95,32 C95,48 80,65 50,85Z" fill={cor}/></svg>;
+    if(svg==='star')      return<svg viewBox="0 0 100 100" style={{width:'100%',height:'100%'}}><polygon points="50,5 61,35 95,35 68,57 79,91 50,70 21,91 32,57 5,35 39,35" fill={cor}/></svg>;
+    return<span style={{fontSize:'3.5rem'}}>{it.emoji}</span>;
+  };
+
+  const resp=(op)=>{
+    if(fb)return;
+    const ok=op.nome===it.nome;
+    setFb({tipo:ok?'certo':'errado',msg:ok?`🌟 ${it.nome}! Correcto!`:`❌ Era ${it.nome}!`});
+    if(ok){setPts(p=>p+1);setCombo(c=>c+1);onXp(10);}else setCombo(0);
+    setTimeout(()=>{idx+1>=pool.length?setDone(true):setIdx(prev=>prev+1);},1700);
+  };
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#ECFDF5',overflow:'hidden'}}>
+      <GameHeader titulo="Formas" emoji="🔺"
+        cor="#10B981" sombra="#047857" idx={idx} total={pool.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'16px 14px 20px',display:'flex',flexDirection:'column',justifyContent:'space-between',gap:10}}>
+        <p style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'1.1rem',
+          color:'#064E3B',textAlign:'center'}}>Que forma é esta? 🔺</p>
+        <div style={{display:'flex',justifyContent:'center'}}>
+          <div style={{width:150,height:150,
+            animation:'mascotBreathe 3s ease-in-out infinite'}}>
+            {svgForma(it.svg,'#10B981')}
+          </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+          {opts.map(op=>(
+            <button key={op.nome} disabled={!!fb} onClick={()=>resp(op)}
+              style={{
+                background:fb&&op.nome===it.nome?'#10B981':fb?'#F1F5F9':'#fff',
+                border:`3px solid ${fb&&op.nome===it.nome?'#10B981':'#E2E8F0'}`,
+                borderRadius:16,padding:'16px 6px',
+                fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1rem',
+                color:fb&&op.nome===it.nome?'#fff':'#1C1917',
+                cursor:fb?'default':'pointer',
+                boxShadow:fb?'none':'0 5px 0 #E2E8F0',transition:'all .2s',textAlign:'center',
+                animation:fb&&op.nome===it.nome?'correctPop .35s ease':'none',
+              }}>
+              <div style={{fontSize:'1.8rem',marginBottom:4}}>{op.emoji}</div>
+              {op.nome}
+            </button>
+          ))}
+        </div>
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO Y6 — Memória Young (6 pares, grade 4×3) */
+function JogoMemoria_Young({onFim,onXp,faixa}){
+  const pares=shuffle([...D_YOUNG.memoria,...D_YOUNG.memoria]).map((c,i)=>({...c,uid:i,virado:false,encontrado:false}));
+  const [cartas,setCartas]=useState(pares);
+  const [sel,setSel]=useState([]);
+  const [bloq,setBloq]=useState(false);
+  const [found,setFound]=useState(0);
+  const [tent,setTent]=useState(0);
+  const [done,setDone]=useState(false);
+  const F=FAIXAS[faixa];
+  const total=D_YOUNG.memoria.length;
+
+  const virar=(uid)=>{
+    if(bloq||cartas.find(c=>c.uid===uid).virado||cartas.find(c=>c.uid===uid).encontrado)return;
+    Som.virar();
+    const nsel=[...sel,uid];
+    setCartas(cs=>cs.map(c=>c.uid===uid?{...c,virado:true}:c));
+    setSel(nsel);
+    if(nsel.length===2){
+      setBloq(true);setTent(t=>t+1);
+      const [a,b]=nsel.map(uid=>cartas.find(c=>c.uid===uid));
+      if(a.id===b.id){
+        setTimeout(()=>{
+          Som.par();
+          setCartas(cs=>cs.map(c=>nsel.includes(c.uid)?{...c,encontrado:true}:c));
+          setSel([]);setBloq(false);
+          const nf=found+1;setFound(nf);onXp(8);
+          if(nf===total)setDone(true);
+        },500);
+      }else{
+        setTimeout(()=>{
+          Som.erro();
+          setCartas(cs=>cs.map(c=>nsel.includes(c.uid)?{...c,virado:false}:c));
+          setSel([]);setBloq(false);
+        },900);
+      }
+    }
+  };
+
+  const stars=tent<=total+2?3:tent<=total+5?2:1;
+  if(done)return<Resultado pontos={stars} total={3} xpGanho={found*8}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setCartas(shuffle([...D_YOUNG.memoria,...D_YOUNG.memoria]).map((c,i)=>({...c,uid:i,virado:false,encontrado:false})));setSel([]);setBloq(false);setFound(0);setTent(0);setDone(false);}}
+    onMenu={onFim}/>;
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:F.light,overflow:'hidden'}}>
+      <GameHeader titulo="Memória" emoji="🧠"
+        cor={F.cor} sombra={F.sombra} idx={found} total={total}
+        combo={0} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'14px 12px'}}>
+        <p style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'1rem',
+          color:F.sombra,textAlign:'center',marginBottom:12}}>
+          Encontra os pares! 🧩 Tentativas: {tent}
+        </p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
+          {cartas.map(c=>(
+            <button key={c.uid} onClick={()=>virar(c.uid)}
+              style={{aspectRatio:'1',borderRadius:16,border:'none',cursor:'pointer',
+                background:c.encontrado?'#ECFDF5':c.virado?'#fff':`linear-gradient(135deg,${F.cor},${F.sombra})`,
+                boxShadow:c.encontrado?'0 3px 0 #A7F3D0':c.virado?'0 4px 0 #E2E8F0':`0 5px 0 ${F.sombra}`,
+                fontSize:c.virado||c.encontrado?'2.2rem':'1.8rem',
+                transition:'all .3s cubic-bezier(.34,1.56,.64,1)',
+                transform:c.virado||c.encontrado?'scale(1.07)':'scale(1)'}}>
+              {c.virado||c.encontrado?c.emoji:'❓'}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   JOGOS — FAIXA OLDER (7–8 anos)
+═══════════════════════════════════════════════════════════════ */
+
+/* JOGO O1 — Soletrar */
+function JogoSoletrar_Older({onFim,onXp,faixa}){
+  const [pool]=useState(()=>shuffle([...D_OLDER.soletrar]).slice(0,5));
+  const [idx,setIdx]=useState(0);
+  const [resp,setResp]=useState([]);
+  const [dis,setDis]=useState([]);
+  const [fb,setFb]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const [letras,setLetras]=useState([]);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{
+    const it=pool[idx];if(!it)return;
+    setLetras(shuffle(it.t.split('')));
+    setResp([]);setDis([]);setFb(null);
+    setTimeout(()=>falar(it.t,.75),300);
+  },[idx]);
+
+  if(done)return<Resultado pontos={pts} total={pool.length} xpGanho={pts*15+combo*6}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const it=pool[idx];
+  const tap=(l,i)=>{
+    if(dis.includes(i)||fb)return;
+    const nr=[...resp,l],nd=[...dis,i];
+    setResp(nr);setDis(nd);
+    if(nr.length===it.t.length){
+      const ok=nr.join('')===it.t;
+      setFb({tipo:ok?'certo':'errado',msg:ok?`🌟 Perfeito! "${it.t}"!`:`❌ Era "${it.t}"`});
+      if(ok){setPts(p=>p+1);setCombo(c=>c+1);onXp(15);}else setCombo(0);
+      setTimeout(()=>{idx+1>=pool.length?setDone(true):setIdx(prev=>prev+1);},1800);
+    }
+  };
+  const apagar=()=>{if(!resp.length||fb)return;setResp(r=>r.slice(0,-1));setDis(d=>d.slice(0,-1));};
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#F0F9FF',overflow:'hidden'}}>
+      <GameHeader titulo="Soletrar" emoji="🔡"
+        cor={F.cor} sombra={F.sombra} idx={idx} total={pool.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'14px 14px 24px',display:'flex',flexDirection:'column',gap:12}}>
+        <div style={{textAlign:'center'}}>
+          <div style={{fontSize:'4rem',marginBottom:6}}>{it.emoji}</div>
+          <button onClick={()=>falar(it.t,.7)} style={{
+            background:'#E0F2FE',border:'none',borderRadius:12,padding:'6px 16px',
+            fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'.85rem',
+            color:'#0369A1',cursor:'pointer'}}>🔊 Ouvir palavra</button>
+        </div>
+        {/* área resposta */}
+        <div style={{minHeight:54,background:'#F0F9FF',borderRadius:14,
+          border:'2.5px solid #BAE6FD',padding:'10px',
+          display:'flex',alignItems:'center',justifyContent:'center',
+          gap:4,flexWrap:'wrap',boxShadow:'0 4px 0 #BAE6FD'}}>
+          {resp.length===0
+            ?<span style={{color:'#94A3B8',fontFamily:'Nunito,sans-serif',fontWeight:700,fontSize:'.85rem'}}>
+              Toca nas letras abaixo…</span>
+            :resp.map((l,i)=>(
+              <span key={i} style={{width:38,height:42,display:'inline-flex',alignItems:'center',
+                justifyContent:'center',borderRadius:10,
+                background:fb?(fb.tipo==='certo'?'#10B981':'#EF4444'):'#0EA5E9',
+                color:'#fff',fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.2rem',
+                boxShadow:fb?'none':'0 3px 0 #0174A8',transition:'background .3s'}}>
+                {l.toUpperCase()}</span>
+            ))}
+        </div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:7,justifyContent:'center'}}>
+          {letras.map((l,i)=>(
+            <button key={i} disabled={dis.includes(i)||!!fb} onClick={()=>tap(l,i)}
+              style={{width:44,height:44,borderRadius:12,
+                background:dis.includes(i)?'#F1F5F9':'#fff',
+                border:`2.5px solid ${dis.includes(i)?'#E2E8F0':'#0EA5E9'}`,
+                fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.15rem',
+                color:dis.includes(i)?'#CBD5E1':'#0EA5E9',cursor:dis.includes(i)?'not-allowed':'pointer',
+                boxShadow:dis.includes(i)?'none':'0 4px 0 #BAE6FD'}}>
+              {l.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        {resp.length>0&&!fb&&(
+          <button onClick={apagar} style={{alignSelf:'center',background:'none',
+            border:'2px solid #FECACA',borderRadius:10,padding:'6px 16px',
+            color:'#EF4444',fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'.8rem',cursor:'pointer'}}>
+            ⌫ Apagar</button>
+        )}
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO O2 — Lacuna na Frase */
+function JogoLacuna_Older({onFim,onXp,faixa}){
+  const [pool]=useState(()=>shuffle([...D_OLDER.leitura.lacunas]).slice(0,5));
+  const [idx,setIdx]=useState(0);
+  const [fb,setFb]=useState(null);
+  const [escolha,setEscolha]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{setFb(null);setEscolha(null);},[idx]);
+  if(done)return<Resultado pontos={pts} total={pool.length} xpGanho={pts*12+combo*5}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const ex=pool[idx];
+  const partes=ex.frase.split('___');
+  const resp=(op)=>{
+    if(fb)return;
+    const ok=op===ex.certa;
+    setEscolha(op);
+    setFb({tipo:ok?'certo':'errado',msg:ok?'🌟 Correcto! Muito bem!':` ❌ Era: "${ex.certa}"`});
+    if(ok){setPts(p=>p+1);setCombo(c=>c+1);onXp(12);}else setCombo(0);
+    setTimeout(()=>{idx+1>=pool.length?setDone(true):setIdx(prev=>prev+1);},1700);
+  };
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#EEF2FF',overflow:'hidden'}}>
+      <GameHeader titulo="Completa a Frase" emoji="📝"
+        cor={F.cor} sombra={F.sombra} idx={idx} total={pool.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'16px 14px 20px',display:'flex',flexDirection:'column',justifyContent:'space-between',gap:10}}>
+        <div style={{background:'#E0E7FF',borderRadius:18,border:'2.5px solid #C7D2FE',
+          padding:'22px 20px',textAlign:'center',boxShadow:'0 6px 0 #C7D2FE55'}}>
+          <p style={{fontFamily:'Nunito,sans-serif',fontWeight:700,fontSize:'.85rem',
+            color:'#4338CA',marginBottom:12}}>Escolhe a palavra que falta</p>
+          <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.4rem',
+            color:'#1C1917',lineHeight:1.8}}>
+            {partes[0]}
+            <span style={{display:'inline-block',minWidth:90,
+              borderBottom:`3px solid ${fb?(fb.tipo==='certo'?'#10B981':'#EF4444'):F.cor}`,
+              margin:'0 6px',color:fb?(fb.tipo==='certo'?'#10B981':'#EF4444'):F.cor,
+              transition:'color .3s,border-color .3s'}}>
+              {escolha||'___'}
+            </span>
+            {partes[1]}
+          </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          {ex.opcs.map(op=>(
+            <BotaoOp key={op} texto={op}
+              correto={fb&&op===ex.certa}
+              errado={fb?.tipo==='errado'&&op===escolha&&op!==ex.certa}
+              neutro={!fb} cor={F.cor} sombra={F.sombra}
+              fontSize='1.1rem' padding='20px 10px'
+              disabled={!!fb} onClick={()=>resp(op)}/>
+          ))}
+        </div>
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO O3 — Matemática */
+function JogoMat_Older({onFim,onXp,faixa}){
+  const gerar=()=>Math.random()>.6?D_OLDER.matematica.mult():Math.random()>.5?D_OLDER.matematica.adicao():D_OLDER.matematica.subtracao();
+  const [pergs]=useState(()=>Array.from({length:6},gerar));
+  const [idx,setIdx]=useState(0);
+  const [fb,setFb]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const [opts,setOpts]=useState([]);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{
+    const p=pergs[idx];if(!p)return;
+    const s=new Set([p.res]);
+    while(s.size<4){s.add(rand(Math.max(0,p.res-4),p.res+4));}
+    setOpts(shuffle([...s]));
+    setFb(null);
+    falar(`${p.a} ${p.op==='+'?'mais':p.op==='-'?'menos':'vezes'} ${p.b}`,.8);
+  },[idx]);
+
+  if(done)return<Resultado pontos={pts} total={pergs.length} xpGanho={pts*14+combo*6}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const p=pergs[idx];
+  const resp=(op)=>{
+    if(fb)return;
+    const ok=op===p.res;
+    setFb({tipo:ok?'certo':'errado',msg:ok?`🌟 ${p.a}${p.op}${p.b}=${p.res} ✓`:`❌ Era ${p.res}`});
+    if(ok){setPts(v=>v+1);setCombo(c=>c+1);onXp(14);}else setCombo(0);
+    setTimeout(()=>{idx+1>=pergs.length?setDone(true):setIdx(prev=>prev+1);},1600);
+  };
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#FFFBEB',overflow:'hidden'}}>
+      <GameHeader titulo="Matemática" emoji="🧮"
+        cor={F.cor} sombra={F.sombra} idx={idx} total={pergs.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'16px 14px 24px',display:'flex',flexDirection:'column',gap:12}}>
+        <div style={{textAlign:'center'}}>
+          <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'2.6rem',color:'#1C1917',
+            background:'#FFFBEB',borderRadius:20,border:'2.5px solid #FDE68A',
+            padding:'16px 28px',boxShadow:'0 6px 0 #FDE68A',display:'inline-block',letterSpacing:2}}>
+            {p.a} {p.op} {p.b} = <span style={{color:F.cor}}>?</span>
+          </div>
+        </div>
+        {/* blocos visuais */}
+        <div style={{display:'flex',flexWrap:'wrap',gap:5,justifyContent:'center',padding:'0 8px'}}>
+          {Array.from({length:Math.min(p.a,12)}).map((_,i)=>(
+            <div key={`a${i}`} style={{width:26,height:26,borderRadius:'50%',
+              background:'linear-gradient(135deg,#F59E0B,#EF4444)',boxShadow:'0 2px 0 #B45309'}}/>
+          ))}
+          {p.op==='+'&&Array.from({length:Math.min(p.b,12)}).map((_,i)=>(
+            <div key={`b${i}`} style={{width:26,height:26,borderRadius:'50%',
+              background:'linear-gradient(135deg,#6366F1,#8B5CF6)',boxShadow:'0 2px 0 #3730A3'}}/>
+          ))}
+          {p.op==='×'&&<div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'.85rem',
+            color:'#92807A',margin:'4px 0'}}>
+            {p.a} grupos de {p.b}
+          </div>}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          {opts.map(op=>(
+            <BotaoOp key={op} texto={String(op)}
+              correto={!!fb&&op===p.res} errado={!!fb&&op!==p.res&&fb.tipo==='errado'}
+              neutro={!fb} cor={F.cor} sombra={F.sombra}
+              fontSize='1.5rem' padding='16px 8px'
+              disabled={!!fb} onClick={()=>resp(op)}/>
+          ))}
+        </div>
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO O4 — Calendário (Dias + Meses) */
+function JogoCalendario_Older({onFim,onXp,faixa}){
+  const modo=Math.random()>.5?'dias':'meses';
+  const lista=modo==='dias'?D_OLDER.dias:D_OLDER.meses;
+  const pergs=shuffle(lista.map((d,i)=>({
+    resp:d,pos:i+1,
+    perg:modo==='dias'?`Qual é o ${i+1}º dia da semana?`:`Qual é o ${i+1}º mês do ano?`,
+    opcs:shuffle([d,...shuffle(lista.filter(x=>x!==d)).slice(0,3)]),
+  }))).slice(0,5);
+
+  const [idx,setIdx]=useState(0);
+  const [fb,setFb]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{setFb(null);},[idx]);
+  if(done)return<Resultado pontos={pts} total={pergs.length} xpGanho={pts*12+combo*5}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const ex=pergs[idx];
+  const resp=(op)=>{
+    if(fb)return;
+    const ok=op===ex.resp;
+    setFb({tipo:ok?'certo':'errado',msg:ok?`🌟 Correcto! ${ex.resp}!`:`❌ Era ${ex.resp}`});
+    if(ok){setPts(p=>p+1);setCombo(c=>c+1);onXp(12);}else setCombo(0);
+    setTimeout(()=>{idx+1>=pergs.length?setDone(true):setIdx(prev=>prev+1);},1600);
+  };
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#ECFDF5',overflow:'hidden'}}>
+      <GameHeader titulo={modo==='dias'?'Dias da Semana':'Meses do Ano'} emoji="📅"
+        cor={F.cor} sombra={F.sombra} idx={idx} total={pergs.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'14px 14px 20px',display:'flex',flexDirection:'column',justifyContent:'space-between',gap:10}}>
+        {/* mini visualização */}
+        <div style={{display:'flex',gap:4,justifyContent:'center',flexWrap:'wrap'}}>
+          {lista.slice(0,modo==='dias'?7:12).map((d,i)=>(
+            <div key={d} style={{textAlign:'center',padding:'5px 4px',borderRadius:10,
+              minWidth:modo==='dias'?34:28,
+              background:i+1===ex.pos?F.cor:'#F1F5F9',
+              border:`2px solid ${i+1===ex.pos?F.sombra:'#E2E8F0'}`,transition:'all .3s'}}>
+              <div style={{fontSize:'.55rem',fontFamily:'Nunito,sans-serif',fontWeight:900,
+                color:i+1===ex.pos?'#fff':'#94A3B8'}}>
+                {d.slice(0,3)}
+              </div>
+              <div style={{fontSize:'.7rem',fontFamily:"'Baloo 2',cursive",fontWeight:900,
+                color:i+1===ex.pos?'#fff':'#CBD5E1'}}>{i+1}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:'#A7F3D0',borderRadius:18,border:'2.5px solid #6EE7B7',
+          padding:'20px 18px',textAlign:'center',boxShadow:'0 5px 0 #6EE7B755'}}>
+          <p style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.25rem',color:'#1C1917',margin:0}}>
+            {ex.perg}
+          </p>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          {ex.opcs.map(op=>(
+            <BotaoOp key={op} texto={op}
+              correto={!!fb&&op===ex.resp}
+              errado={!!fb&&fb.tipo==='errado'&&op!==ex.resp}
+              neutro={!fb} cor={F.cor} sombra={F.sombra}
+              fontSize='1rem' padding='18px 8px'
+              disabled={!!fb} onClick={()=>resp(op)}/>
+          ))}
+        </div>
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO O5 — Qual é o Diferente */
+function JogoDiferente_Older({onFim,onXp,faixa}){
+  const [pool]=useState(()=>shuffle([...D_OLDER.diferente]).slice(0,5));
+  const [idx,setIdx]=useState(0);
+  const [fb,setFb]=useState(null);
+  const [pts,setPts]=useState(0);
+  const [combo,setCombo]=useState(0);
+  const [done,setDone]=useState(false);
+  const [shuf,setShuf]=useState([]);
+  const F=FAIXAS[faixa];
+
+  useEffect(()=>{setShuf(shuffle(pool[idx]?.grupo||[]));setFb(null);},[idx]);
+  if(done)return<Resultado pontos={pts} total={pool.length} xpGanho={pts*12+combo*5}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setIdx(0);setPts(0);setCombo(0);setDone(false);}} onMenu={onFim}/>;
+
+  const ex=pool[idx];
+  const resp=(op)=>{
+    if(fb)return;
+    const ok=op===ex.certo;
+    setFb({tipo:ok?'certo':'errado',msg:ok?`🌟 ${ex.certo} é o intruso! ${ex.dica}`:`❌ Era: ${ex.certo}`});
+    if(ok){setPts(p=>p+1);setCombo(c=>c+1);onXp(12);}else setCombo(0);
+    setTimeout(()=>{idx+1>=pool.length?setDone(true):setIdx(prev=>prev+1);},1700);
+  };
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:'#FEF2F2',overflow:'hidden'}}>
+      <GameHeader titulo="O Intruso" emoji="🔍"
+        cor={F.cor} sombra={F.sombra} idx={idx} total={pool.length}
+        combo={combo} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'14px 12px 24px',display:'flex',flexDirection:'column',gap:12}}>
+        <p style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'.92rem',
+          color:'#991B1B',textAlign:'center'}}>Toca no que não pertence ao grupo!</p>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          {shuf.map((item,i)=>(
+            <button key={i} disabled={!!fb} onClick={()=>resp(item)}
+              style={{
+                background:fb&&item===ex.certo?'#ECFDF5':fb?'#FFF1F2':'#fff',
+                border:`3px solid ${fb&&item===ex.certo?'#10B981':fb?'#FECACA':'#E2E8F0'}`,
+                borderRadius:20,padding:'20px 10px',cursor:fb?'default':'pointer',
+                boxShadow:fb?'none':'0 6px 0 #E2E8F0',transition:'all .25s',
+                fontSize:'3rem',textAlign:'center',
+                transform:fb&&item===ex.certo?'scale(1.08)':'scale(1)',
+                animation:fb&&item===ex.certo?'correctPop .4s ease':'none',
+              }}>
+              {item}
+              {fb&&item===ex.certo&&(
+                <div style={{fontSize:'.65rem',fontFamily:'Nunito,sans-serif',
+                  fontWeight:900,color:'#10B981',marginTop:4}}>✓ Intruso!</div>
+              )}
+            </button>
+          ))}
+        </div>
+        <FbBox fb={fb}/>
+      </div>
+    </div>
+  );
+}
+
+/* JOGO O6 — Memória Older (8 pares) */
+function JogoMemoria_Older({onFim,onXp,faixa}){
+  const pares=shuffle([...D_OLDER.memoria,...D_OLDER.memoria]).map((c,i)=>({...c,uid:i,virado:false,encontrado:false}));
+  const [cartas,setCartas]=useState(pares);
+  const [sel,setSel]=useState([]);
+  const [bloq,setBloq]=useState(false);
+  const [found,setFound]=useState(0);
+  const [tent,setTent]=useState(0);
+  const [done,setDone]=useState(false);
+  const F=FAIXAS[faixa];
+  const total=D_OLDER.memoria.length;
+
+  const virar=(uid)=>{
+    if(bloq||cartas.find(c=>c.uid===uid).virado||cartas.find(c=>c.uid===uid).encontrado)return;
+    Som.virar();
+    const nsel=[...sel,uid];
+    setCartas(cs=>cs.map(c=>c.uid===uid?{...c,virado:true}:c));
+    setSel(nsel);
+    if(nsel.length===2){
+      setBloq(true);setTent(t=>t+1);
+      const [a,b]=nsel.map(uid=>cartas.find(c=>c.uid===uid));
+      if(a.id===b.id){
+        setTimeout(()=>{
+          Som.par();
+          setCartas(cs=>cs.map(c=>nsel.includes(c.uid)?{...c,encontrado:true}:c));
+          setSel([]);setBloq(false);const nf=found+1;setFound(nf);onXp(10);
+          if(nf===total)setDone(true);
+        },500);
+      }else{
+        setTimeout(()=>{
+          Som.erro();
+          setCartas(cs=>cs.map(c=>nsel.includes(c.uid)?{...c,virado:false}:c));
+          setSel([]);setBloq(false);
+        },900);
+      }
+    }
+  };
+  const stars=tent<=total+3?3:tent<=total+6?2:1;
+  if(done)return<Resultado pontos={stars} total={3} xpGanho={found*10}
+    cor={F.cor} sombra={F.sombra} faixa={faixa}
+    onRepetir={()=>{setCartas(shuffle([...D_OLDER.memoria,...D_OLDER.memoria]).map((c,i)=>({...c,uid:i,virado:false,encontrado:false})));setSel([]);setBloq(false);setFound(0);setTent(0);setDone(false);}}
+    onMenu={onFim}/>;
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',background:F.light,overflow:'hidden'}}>
+      <GameHeader titulo="Memória" emoji="🧠"
+        cor={F.cor} sombra={F.sombra} idx={found} total={total}
+        combo={0} faixa={faixa} onMenu={onFim}/>
+      <div style={{flex:1,overflowY:'auto',padding:'12px 10px'}}>
+        <p style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'.85rem',
+          color:F.sombra,textAlign:'center',marginBottom:10}}>
+          Encontra os 8 pares! Tentativas: {tent}
+        </p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:7}}>
+          {cartas.map(c=>(
+            <button key={c.uid} onClick={()=>virar(c.uid)}
+              style={{aspectRatio:'1',borderRadius:14,border:'none',cursor:'pointer',
+                background:c.encontrado?'#ECFDF5':c.virado?'#fff':`linear-gradient(135deg,${F.cor},${F.sombra})`,
+                boxShadow:c.encontrado?'0 3px 0 #A7F3D0':c.virado?'0 4px 0 #E2E8F0':`0 4px 0 ${F.sombra}`,
+                fontSize:c.virado||c.encontrado?'1.8rem':'1.4rem',
+                transition:'all .3s cubic-bezier(.34,1.56,.64,1)',
+                transform:c.virado||c.encontrado?'scale(1.06)':'scale(1)'}}>
+              {c.virado||c.encontrado?c.emoji:'❓'}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MENU DE MUNDO (lista de atividades)
+═══════════════════════════════════════════════════════════════ */
+function MenuMundo({mundo,onJogo,onVoltar,estrelas,faixa}){
+  const F=FAIXAS[faixa];
+  // cada mundo agrupa todas as actividades da faixa
+  const atividades=faixa==='young'?[
+    {id:'abc',       nome:'Aprende o ABC',    emoji:'🔤',desc:'Letras e sons'},
+    {id:'vogais',    nome:'As Vogais',         emoji:'🔵',desc:'A · E · I · O · U'},
+    {id:'numeros',   nome:'Números 1–8',       emoji:'🔢',desc:'Conta os objetos'},
+    {id:'cores',     nome:'Cores',             emoji:'🎨',desc:'Aprende as cores'},
+    {id:'formas',    nome:'Formas',            emoji:'🔺',desc:'Geometria básica'},
+    {id:'memoria',   nome:'Jogo da Memória',  emoji:'🧠',desc:'Encontra os pares'},
+  ]:[
+    {id:'leitura',    nome:'Leitura',           emoji:'📖',desc:'Palavras e lacunas'},
+    {id:'soletrar',   nome:'Soletrar',          emoji:'🔡',desc:'Ordena as letras'},
+    {id:'matematica', nome:'Matemática',        emoji:'🧮',desc:'Cálculo e multiplicação'},
+    {id:'calendario', nome:'Calendário',        emoji:'📅',desc:'Dias e meses'},
+    {id:'diferente',  nome:'O Intruso',         emoji:'🔍',desc:'Qual é o diferente?'},
+    {id:'memoria2',   nome:'Memória',           emoji:'🧠',desc:'8 pares para encontrar'},
+  ];
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      {/* header mundo */}
+      <div style={{background:`linear-gradient(135deg,${mundo.cor},${mundo.sombra})`,
+        padding:'14px 14px 18px',flexShrink:0,boxShadow:`0 6px 0 ${mundo.sombra}55`}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+          <button onClick={onVoltar} style={{background:'rgba(255,255,255,.22)',border:'none',
+            borderRadius:10,width:36,height:36,display:'flex',alignItems:'center',
+            justifyContent:'center',cursor:'pointer',fontSize:'1.1rem',color:'#fff'}}>←</button>
+          <span style={{fontSize:'2.4rem'}}>{mundo.emoji}</span>
+          <div>
+            <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+              fontSize:faixa==='young'?'1.15rem':'1.05rem',color:'#fff'}}>{mundo.nome}</div>
+            <div style={{fontFamily:'Nunito,sans-serif',fontWeight:700,
+              fontSize:'.72rem',color:'rgba(255,255,255,.8)'}}>{mundo.desc}</div>
+          </div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{flex:1}}>
+            <ProgressBar valor={estrelas} max={mundo.max} cor="rgba(255,255,255,.9)" h={faixa==='young'?10:8}/>
+          </div>
+          <span style={{fontFamily:'Nunito,sans-serif',fontWeight:900,
+            fontSize:'.75rem',color:'rgba(255,255,255,.9)',whiteSpace:'nowrap'}}>
+            ⭐{estrelas}/{mundo.max}
+          </span>
+        </div>
+      </div>
+      {/* lista atividades */}
+      <div style={{flex:1,overflowY:'auto',padding:'14px 12px 20px',
+        display:'flex',flexDirection:'column',gap:10,
+        background:faixa==='young'?'#FFF3E8':'#F8FAFC'}}>
+        {atividades.map((a,i)=>(
+          <button key={a.id} onClick={()=>onJogo(a.id)}
+            style={{
+              background:'#fff',border:`2.5px solid ${mundo.cor}33`,borderRadius:faixa==='young'?22:18,
+              padding:faixa==='young'?'16px 14px':'13px 14px',cursor:'pointer',textAlign:'left',
+              boxShadow:`0 ${faixa==='young'?6:5}px 0 ${mundo.cor}22`,
+              display:'flex',alignItems:'center',gap:12,
+              animation:`slideIn .3s ease ${i*60}ms both`,
+              transition:'all .18s cubic-bezier(.34,1.56,.64,1)',
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-4px)';e.currentTarget.style.boxShadow=`0 9px 0 ${mundo.cor}33`;}}
+            onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=`0 5px 0 ${mundo.cor}22`;}}>
+            <div style={{width:faixa==='young'?56:50,height:faixa==='young'?56:50,
+              borderRadius:faixa==='young'?18:14,
+              background:`linear-gradient(135deg,${mundo.cor},${mundo.sombra})`,
+              display:'flex',alignItems:'center',justifyContent:'center',
+              fontSize:faixa==='young'?'1.9rem':'1.6rem',flexShrink:0,
+              boxShadow:`0 4px 0 ${mundo.sombra}66`}}>
+              {a.emoji}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+                fontSize:faixa==='young'?'1.05rem':'.98rem',color:'#1C1917'}}>{a.nome}</div>
+              <div style={{fontFamily:'Nunito,sans-serif',fontWeight:700,
+                fontSize:'.73rem',color:'#92807A'}}>{a.desc}</div>
+            </div>
+            <div style={{background:`${mundo.cor}18`,color:mundo.cor,borderRadius:10,
+              padding:faixa==='young'?'5px 14px':'4px 12px',
+              fontFamily:"'Baloo 2',cursive",fontWeight:900,
+              fontSize:faixa==='young'?'.85rem':'.78rem',
+              boxShadow:`0 3px 0 ${mundo.cor}33`,flexShrink:0}}>
+              Jogar →
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HUB (escolha de mundo)
+═══════════════════════════════════════════════════════════════ */
+function Hub({xp,streak,onMundo,perfil,avatar,faixa,mundosData,onLogout}){
+  const F=FAIXAS[faixa];
+  const nivel=Math.floor(xp/F.maxXpNivel)+1;
+  const xpBar=(xp%F.maxXpNivel)/F.maxXpNivel*100;
+  const mundos=faixa==='young'?MUNDOS_YOUNG:MUNDOS_OLDER;
+
+  return(
+    <div style={{flex:1,overflowY:'auto',
+      background:faixa==='young'
+        ?'linear-gradient(160deg,#FFF3E8 0%,#FEF9C3 100%)'
+        :'linear-gradient(160deg,#0F172A 0%,#1E1B4B 100%)'}}>
+      {/* Hero */}
+      <div style={{
+        background:faixa==='young'
+          ?`linear-gradient(135deg,${F.cor},${F.sombra})`
+          :'linear-gradient(135deg,#1E1B4B,#312E81)',
+        padding:faixa==='young'?'22px 16px 26px':'18px 16px 22px',
+        position:'relative',overflow:'hidden',
+      }}>
+        {/* estrelas (só older) */}
+        {faixa==='older'&&[...Array(16)].map((_,i)=>(
+          <div key={i} style={{position:'absolute',left:`${rand(2,98)}%`,top:`${rand(5,95)}%`,
+            width:rand(2,4),height:rand(2,4),borderRadius:'50%',background:'#fff',
+            opacity:Math.random()*.6+.1,
+            animation:`twinkle ${rand(2,4)}s ease-in-out ${rand(0,2)}s infinite alternate`}}/>
+        ))}
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,position:'relative',zIndex:1}}>
+          <div style={{width:58,height:58,borderRadius:20,
+            background:faixa==='young'?'rgba(255,255,255,.25)':'linear-gradient(135deg,#F59E0B,#EF4444)',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:'2.1rem',boxShadow:faixa==='young'?'none':'0 5px 0 #B45309',
+            animation:'mascotBreathe 3s ease-in-out infinite',flexShrink:0}}>
+            {avatar}
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+              fontSize:faixa==='young'?'1.5rem':'1.4rem',color:'#fff',
+              textShadow:'2px 3px 0 rgba(0,0,0,.25)',letterSpacing:-0.5}}>
+              {faixa==='young'?`Olá, ${perfil}! 👋`:`Aprender`}
+              {faixa==='older'&&<span style={{color:'#FBBF24'}}>+</span>}
+            </div>
+            <div style={{fontFamily:'Nunito,sans-serif',fontWeight:700,
+              fontSize:'.75rem',color:'rgba(255,255,255,.8)'}}>
+              {faixa==='young'?`${F.mascote} ${F.mascoteNome} está pronto!`:`Olá, ${perfil}! Pronto para explorar? 🚀`}
+            </div>
+          </div>
+          {streak>0&&(
+            <div style={{background:'rgba(255,255,255,.2)',borderRadius:14,
+              padding:'6px 12px',textAlign:'center',backdropFilter:'blur(4px)'}}>
+              <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.1rem',color:'#fff'}}>🔥{streak}</div>
+              <div style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'.58rem',color:'rgba(255,255,255,.8)'}}>dias!</div>
+            </div>
+          )}
+          {onLogout&&(
+            <button onClick={onLogout}
+              style={{background:'rgba(255,255,255,.12)',border:'none',borderRadius:10,
+                width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',
+                cursor:'pointer',fontSize:'.85rem',color:'rgba(255,255,255,.7)',flexShrink:0,
+                transition:'background .15s'}}
+              title="Trocar perfil">
+              👤
+            </button>
+          )}
+        </div>
+        {/* XP */}
+        <div style={{background:'rgba(255,255,255,.15)',borderRadius:16,padding:'10px 14px',
+          position:'relative',zIndex:1,border:'1px solid rgba(255,255,255,.18)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:7}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{background:'rgba(255,255,255,.25)',borderRadius:10,
+                width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',
+                fontFamily:"'Baloo 2',cursive",fontWeight:900,
+                fontSize:faixa==='young'?'1rem':'.85rem',color:'#fff'}}>
+                {nivel}
+              </div>
+              <div>
+                <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+                  fontSize:faixa==='young'?'.95rem':'.85rem',color:'#fff'}}>
+                  Nível {nivel} — {F.nome}
+                </div>
+                <div style={{fontFamily:'Nunito,sans-serif',fontWeight:700,
+                  fontSize:'.62rem',color:'rgba(255,255,255,.65)'}}>
+                  {F.maxXpNivel-(xp%F.maxXpNivel)} XP para subir
+                </div>
+              </div>
+            </div>
+            <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+              fontSize:faixa==='young'?'1.05rem':'1rem',color:'#FBBF24'}}>
+              ⭐{xp}
+            </div>
+          </div>
+          <ProgressBar valor={xpBar} max={100} cor={faixa==='young'?'rgba(255,255,255,.9)':'#FBBF24'} h={faixa==='young'?12:10}/>
+        </div>
+      </div>
+
+      {/* Badge faixa */}
+      <div style={{
+        margin:'14px 14px 0',
+        background:`linear-gradient(135deg,${F.cor}22,${F.cor}11)`,
+        border:`2px solid ${F.cor}44`,borderRadius:16,padding:'10px 14px',
+        display:'flex',alignItems:'center',gap:10,
+      }}>
+        <span style={{fontSize:'1.5rem'}}>{F.emoji}</span>
+        <div>
+          <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+            fontSize:faixa==='young'?'.95rem':'.88rem',
+            color:faixa==='young'?F.sombra:'#1C1917'}}>
+            {F.label} · {F.nome}
+          </div>
+          <div style={{fontFamily:'Nunito,sans-serif',fontWeight:700,fontSize:'.7rem',color:'#92807A'}}>
+            {F.desc}
+          </div>
+        </div>
+        <div style={{marginLeft:'auto',background:F.cor,color:'#fff',borderRadius:10,
+          padding:'3px 10px',fontFamily:'Nunito,sans-serif',fontWeight:900,fontSize:'.65rem',
+          boxShadow:`0 3px 0 ${F.sombra}`}}>
+          {F.tag}
+        </div>
+      </div>
+
+      {/* Mundos */}
+      <div style={{padding:'14px 12px 28px',display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+          fontSize:faixa==='young'?'1rem':'.9rem',
+          color:faixa==='young'?F.sombra:'rgba(255,255,255,.5)',
+          letterSpacing:.5,paddingLeft:2}}>
+          {faixa==='young'?'🌈 ESCOLHE UMA ATIVIDADE':'🌍 ESCOLHE UM MUNDO'}
+        </div>
+        {mundos.map((m,i)=>(
+          <button key={m.id} onClick={()=>onMundo(m)}
+            style={{
+              background:faixa==='young'?`linear-gradient(135deg,${m.cor}18,${m.cor}08)`:`linear-gradient(135deg,${m.cor}22,${m.cor}11)`,
+              border:`2.5px solid ${m.cor}${faixa==='young'?'55':'44'}`,
+              borderRadius:faixa==='young'?24:20,
+              padding:faixa==='young'?'15px 14px':'13px 14px',
+              cursor:'pointer',textAlign:'left',
+              boxShadow:`0 ${faixa==='young'?7:5}px 0 ${m.cor}22`,
+              display:'flex',alignItems:'center',gap:12,
+              animation:`slideIn .35s ease ${i*65}ms both`,
+              transition:'all .2s cubic-bezier(.34,1.56,.64,1)',
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-4px) scale(1.01)';}}
+            onMouseLeave={e=>{e.currentTarget.style.transform='';}}>
+            <div style={{width:faixa==='young'?60:54,height:faixa==='young'?60:54,
+              borderRadius:faixa==='young'?20:16,
+              background:`linear-gradient(135deg,${m.cor},${m.sombra})`,
+              display:'flex',alignItems:'center',justifyContent:'center',
+              fontSize:faixa==='young'?'2.1rem':'1.85rem',flexShrink:0,
+              boxShadow:`0 5px 0 ${m.sombra}`}}>
+              {m.emoji}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,
+                fontSize:faixa==='young'?'1.05rem':'1rem',
+                color:faixa==='young'?'#1C1917':'#fff',marginBottom:3}}>
+                {m.nome}
+              </div>
+              <div style={{fontFamily:'Nunito,sans-serif',fontWeight:700,
+                fontSize:'.72rem',
+                color:faixa==='young'?'#92807A':'rgba(255,255,255,.5)',marginBottom:5}}>
+                {m.desc}
+              </div>
+              <ProgressBar valor={mundosData[m.id]||0} max={m.max} cor={m.cor} h={faixa==='young'?8:6}/>
+            </div>
+            <div style={{background:`${m.cor}${faixa==='young'?'33':'33'}`,borderRadius:12,
+              padding:'6px 10px',fontFamily:"'Baloo 2',cursive",fontWeight:900,
+              fontSize:'.8rem',color:m.cor,flexShrink:0}}>→</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ECRÃ DE CADASTRO — com seleção de idade
+═══════════════════════════════════════════════════════════════ */
+function Cadastro({onEntrar}){
+  const [passo,setPasso]=useState(1); // 1=faixa, 2=avatar+nome
+  const [faixa,setFaixa]=useState(null);
+  const [nome,setNome]=useState('');
+  const [avatar,setAvatar]=useState(0);
+
+  const avataresYoung=['🐣','🐸','🦊','🐨','🐮','🦄','🐰','🐯'];
+  const avataresOlder=['🦅','🦁','🐺','🦋','🦊','🐬','🦉','🐉'];
+  const avatares=faixa==='young'?avataresYoung:avataresOlder;
+  const F=faixa?FAIXAS[faixa]:null;
+
+  return(
+    <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',
+      justifyContent:'center',padding:'20px 16px',gap:16,
+      background:'linear-gradient(160deg,#1E1B4B 0%,#312E81 50%,#0F172A 100%)',
+      position:'relative',overflow:'hidden'}}>
+      {/* estrelas de fundo */}
+      {[...Array(14)].map((_,i)=>(
+        <div key={i} style={{position:'absolute',left:`${rand(2,98)}%`,top:`${rand(2,98)}%`,
+          width:rand(2,4),height:rand(2,4),borderRadius:'50%',background:'#fff',
+          opacity:Math.random()*.5+.1,pointerEvents:'none',
+          animation:`twinkle ${rand(2,5)}s ease-in-out ${rand(0,3)}s infinite alternate`}}/>
+      ))}
+
+      {/* Logo */}
+      <div style={{textAlign:'center',position:'relative',zIndex:1}}>
+        <div style={{fontSize:'3.8rem',animation:'mascotBreathe 3s ease-in-out infinite',
+          filter:'drop-shadow(0 8px 16px rgba(0,0,0,.4))'}}>🦉</div>
+        <h1 style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'2rem',
+          color:'#fff',margin:'6px 0 2px',textShadow:'3px 3px 0 rgba(0,0,0,.3)',letterSpacing:-1}}>
+          Aprender<span style={{color:'#FBBF24'}}>+</span>
+        </h1>
+        <p style={{fontFamily:'Nunito,sans-serif',fontWeight:700,fontSize:'.8rem',
+          color:'rgba(255,255,255,.6)',margin:0}}>Aprender é uma aventura! 🚀</p>
+      </div>
+
+      {/* PASSO 1 — Escolha da faixa etária */}
+      {passo===1&&(
+        <div style={{width:'100%',maxWidth:320,position:'relative',zIndex:1}}>
+          <div style={{background:'rgba(255,255,255,.08)',borderRadius:24,padding:'20px 16px',
+            border:'1px solid rgba(255,255,255,.15)'}}>
+            <p style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.05rem',
+              color:'#fff',textAlign:'center',marginBottom:16}}>
+              Quantos anos tens? 🎂
+            </p>
+            {/* Opção 4-6 */}
+            <button onClick={()=>{setFaixa('young');setPasso(2);}}
+              style={{width:'100%',padding:'16px 14px',marginBottom:10,borderRadius:20,
+                border:'3px solid #10B981',cursor:'pointer',textAlign:'left',
+                background:'linear-gradient(135deg,#10B98122,#10B98108)',
+                display:'flex',alignItems:'center',gap:14,
+                transition:'all .2s',boxShadow:'0 5px 0 #04785733'}}
+              onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-4px)';e.currentTarget.style.boxShadow='0 9px 0 #04785744';}}
+              onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 5px 0 #04785733';}}>
+              <div style={{fontSize:'3rem',flexShrink:0}}>🌱</div>
+              <div>
+                <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.2rem',
+                  color:'#10B981'}}>4 – 6 anos</div>
+                <div style={{fontFamily:'Nunito,sans-serif',fontWeight:700,fontSize:'.75rem',
+                  color:'rgba(255,255,255,.65)'}}>Pequeninos · Letras, números e cores</div>
+                <div style={{marginTop:4,display:'inline-block',background:'#10B98133',
+                  borderRadius:8,padding:'2px 10px',fontFamily:'Nunito,sans-serif',
+                  fontWeight:900,fontSize:'.65rem',color:'#10B981'}}>🌟 Nível Fácil</div>
+              </div>
+            </button>
+            {/* Opção 7-8 */}
+            <button onClick={()=>{setFaixa('older');setPasso(2);}}
+              style={{width:'100%',padding:'16px 14px',borderRadius:20,
+                border:'3px solid #6366F1',cursor:'pointer',textAlign:'left',
+                background:'linear-gradient(135deg,#6366F122,#6366F108)',
+                display:'flex',alignItems:'center',gap:14,
+                transition:'all .2s',boxShadow:'0 5px 0 #3730A333'}}
+              onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-4px)';e.currentTarget.style.boxShadow='0 9px 0 #3730A344';}}
+              onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 5px 0 #3730A333';}}>
+              <div style={{fontSize:'3rem',flexShrink:0}}>🚀</div>
+              <div>
+                <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.2rem',
+                  color:'#818CF8'}}>7 – 8 anos</div>
+                <div style={{fontFamily:'Nunito,sans-serif',fontWeight:700,fontSize:'.75rem',
+                  color:'rgba(255,255,255,.65)'}}>Exploradores · Palavras, cálculo e calendário</div>
+                <div style={{marginTop:4,display:'inline-block',background:'#6366F133',
+                  borderRadius:8,padding:'2px 10px',fontFamily:'Nunito,sans-serif',
+                  fontWeight:900,fontSize:'.65rem',color:'#818CF8'}}>🔥 Nível Desafio</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PASSO 2 — Avatar + Nome */}
+      {passo===2&&F&&(
+        <div style={{width:'100%',maxWidth:320,position:'relative',zIndex:1}}>
+          <div style={{background:'rgba(255,255,255,.08)',borderRadius:24,padding:'18px 16px',
+            border:'1px solid rgba(255,255,255,.15)'}}>
+            {/* badge faixa */}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,
+              background:`${F.cor}22`,borderRadius:14,padding:'8px 12px',
+              border:`1.5px solid ${F.cor}44`}}>
+              <span style={{fontSize:'1.3rem'}}>{F.emoji}</span>
+              <div>
+                <div style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'.88rem',color:F.cor}}>
+                  {F.label} · {F.nome}
+                </div>
+                <button onClick={()=>{setPasso(1);setNome('');setAvatar(0);}}
+                  style={{background:'none',border:'none',fontFamily:'Nunito,sans-serif',
+                    fontWeight:700,fontSize:'.65rem',color:'rgba(255,255,255,.5)',cursor:'pointer',padding:0}}>
+                  ← Mudar faixa
+                </button>
+              </div>
+            </div>
+            <p style={{fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'.95rem',
+              color:'#fff',textAlign:'center',marginBottom:12}}>
+              Escolhe o teu mascote! {F.mascote}
+            </p>
+            {/* avatares */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:14}}>
+              {avatares.map((a,i)=>(
+                <button key={i} onClick={()=>setAvatar(i)}
+                  style={{aspectRatio:'1',borderRadius:14,
+                    border:`2.5px solid ${avatar===i?F.cor:'rgba(255,255,255,.15)'}`,
+                    background:avatar===i?`${F.cor}33`:'rgba(255,255,255,.06)',
+                    fontSize:'1.7rem',cursor:'pointer',
+                    transform:avatar===i?'scale(1.12)':'scale(1)',
+                    transition:'all .2s',boxShadow:avatar===i?`0 4px 0 ${F.sombra}55`:'none'}}>
+                  {a}
+                </button>
+              ))}
+            </div>
+            {/* avatar selecionado */}
+            <div style={{textAlign:'center',fontSize:'2.8rem',marginBottom:12,
+              animation:'mascotBreathe 3s ease-in-out infinite'}}>
+              {avatares[avatar]}
+            </div>
+            {/* nome */}
+            <input
+              value={nome}
+              onChange={e=>setNome(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&nome.trim()&&onEntrar(nome.trim(),avatares[avatar],faixa)}
+              placeholder={`O teu nome, ${F.mascote}…`}
+              maxLength={18}
+              style={{width:'100%',padding:'12px 16px',borderRadius:14,boxSizing:'border-box',
+                border:`2px solid ${nome.trim()?F.cor:'rgba(255,255,255,.18)'}`,
+                background:'rgba(255,255,255,.1)',color:'#fff',
+                fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:'1rem',
+                outline:'none',marginBottom:12,transition:'border-color .2s'}}
+            />
+            <button
+              onClick={()=>nome.trim()&&onEntrar(nome.trim(),avatares[avatar],faixa)}
+              disabled={!nome.trim()}
+              style={{width:'100%',padding:'13px',borderRadius:16,border:'none',
+                background:nome.trim()?`linear-gradient(135deg,${F.cor},${F.sombra})`:'rgba(255,255,255,.1)',
+                color:nome.trim()?'#fff':'rgba(255,255,255,.3)',
+                fontFamily:"'Baloo 2',cursive",fontWeight:900,fontSize:'1.1rem',
+                cursor:nome.trim()?'pointer':'not-allowed',
+                boxShadow:nome.trim()?`0 6px 0 ${F.sombra}`:'none',transition:'all .25s'}}>
+              {faixa==='young'?`Vamos jogar! 🌟`:`Começar! 🚀`}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   APP — RAIZ  (com persistência, sons e mascote)
+═══════════════════════════════════════════════════════════════ */
+function App(){
+  // ── Carregar dados guardados ──────────────────────────────
+  const [dadosInicio] = useState(() => Dados.load());
+
+  const [tela,setTela]  = useState(dadosInicio.perfil ? 'hub' : 'cadastro');
+  const [perfil,setPerfil]   = useState(dadosInicio.perfil  || '');
+  const [avatar,setAvatar]   = useState(dadosInicio.avatar  || '🦉');
+  const [faixa,setFaixa]     = useState(dadosInicio.faixa   || 'young');
+  const [xp,setXp]           = useState(dadosInicio.xp      || 0);
+  const [streak,setStreak]   = useState(dadosInicio.streak  || 0);
+  const [mundosData,setMundosData] = useState(dadosInicio.mundos || {});
+  const [mundoAtual,setMundoAtual] = useState(null);
+  const [jogoAtual,setJogoAtual]   = useState(null);
+  const [showXp,setShowXp]   = useState(false);
+  const [xpVal,setXpVal]     = useState(0);
+  const [combo,setCombo]     = useState(0);
+  const [showCombo,setShowCombo] = useState(false);
+  const [parts,setParts]     = useState(false);
+
+  // ── Guardar sempre que XP ou mundos mudam ────────────────
+  useEffect(()=>{
+    if(!perfil) return;
+    Dados.save({ xp, streak, lastDay: dadosInicio.lastDay, mundos: mundosData, perfil, avatar, faixa });
+  },[xp, mundosData]);
+
+  // ── Mascote ao entrar no hub ──────────────────────────────
+  useEffect(()=>{
+    if(tela==='hub') setTimeout(()=>Mascote.entrada(), 600);
+  },[tela==='hub' && perfil]);
+
+  // ── Verificar nível subido ────────────────────────────────
+  const F = FAIXAS[faixa];
+  const nivelAnterior = useRef(Math.floor((xp - 0) / (F?.maxXpNivel||60)) + 1);
+  useEffect(()=>{
+    const nivelAtual = Math.floor(xp / (F?.maxXpNivel||60)) + 1;
+    if(nivelAtual > nivelAnterior.current){
+      nivelAnterior.current = nivelAtual;
+      Mascote.nivel();
+    }
+  },[xp]);
+
+  const ganharXp=useCallback((val)=>{
+    Som.xp();
+    setXp(x=>{
+      const novo = x + val;
+      Dados.save({ xp: novo, streak, lastDay: dadosInicio.lastDay, mundos: mundosData, perfil, avatar, faixa });
+      return novo;
+    });
+    setXpVal(val); setShowXp(true);
+    setTimeout(()=>setShowXp(false),1200);
+    setCombo(c=>{
+      const nc=c+1;
+      if(nc>=3){
+        Som.combo();
+        Mascote.combo(nc);
+        setShowCombo(true);
+        setTimeout(()=>setShowCombo(false),1500);
+      }
+      if(nc>=6){setParts(true);setTimeout(()=>setParts(false),1500);}
+      return nc;
+    });
+    if(mundoAtual)
+      setMundosData(md=>{
+        const novo={...md,[mundoAtual.id]:(md[mundoAtual.id]||0)+1};
+        return novo;
+      });
+  },[mundoAtual, streak, perfil, avatar, faixa]);
+
+  const props={onFim:()=>setTela('mundo'),onXp:ganharXp,faixa};
+
+  const JOGOS_YOUNG={
+    abc:()=><JogoABC_Young {...props}/>,
+    vogais:()=><JogoVogais_Young {...props}/>,
+    numeros:()=><JogoNumeros_Young {...props}/>,
+    cores:()=><JogoCores_Young {...props}/>,
+    formas:()=><JogoFormas_Young {...props}/>,
+    memoria:()=><JogoMemoria_Young {...props}/>,
+  };
+  const JOGOS_OLDER={
+    leitura:()=><JogoLacuna_Older {...props}/>,
+    soletrar:()=><JogoSoletrar_Older {...props}/>,
+    matematica:()=><JogoMat_Older {...props}/>,
+    calendario:()=><JogoCalendario_Older {...props}/>,
+    diferente:()=><JogoDiferente_Older {...props}/>,
+    memoria2:()=><JogoMemoria_Older {...props}/>,
+  };
+  const jogoFn=faixa==='young'?(JOGOS_YOUNG[jogoAtual]||null):(JOGOS_OLDER[jogoAtual]||null);
+  const jogoRender=jogoFn?jogoFn():null;
+
+  return(
+    <div style={{minHeight:'100vh',background:'#030712',display:'flex',flexDirection:'column',
+      alignItems:'center',justifyContent:'center',padding:'16px'}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800;900&family=Nunito:wght@600;700;800;900&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        input::placeholder{color:rgba(255,255,255,.38);}
+        @keyframes slideIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+        @keyframes popIn{from{transform:scale(.3) rotate(-15deg);opacity:0}70%{transform:scale(1.15) rotate(4deg)}to{transform:scale(1) rotate(0);opacity:1}}
+        @keyframes starPop{0%{transform:scale(0) rotate(-30deg);opacity:0}60%{transform:scale(1.4) rotate(8deg)}100%{transform:scale(1);opacity:1}}
+        @keyframes mascotBreathe{0%,100%{transform:scale(1) translateY(0) rotate(-2deg)}50%{transform:scale(1.03) translateY(-6px) rotate(2deg)}}
+        @keyframes correctPop{0%{transform:scale(1)}40%{transform:scale(1.1)}100%{transform:scale(1)}}
+        @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
+        @keyframes xpBurst{0%{transform:translate(-50%,-50%) scale(0);opacity:1}50%{transform:translate(-50%,-60%) scale(1.1);opacity:1}100%{transform:translate(-50%,-80%) scale(.8);opacity:0}}
+        @keyframes comboPop{0%{transform:translate(-50%,-50%) scale(0) rotate(-8deg);opacity:1}30%{transform:translate(-50%,-50%) scale(1.15) rotate(3deg);opacity:1}70%{transform:translate(-50%,-50%) scale(1);opacity:1}100%{transform:translate(-50%,-70%) scale(.8);opacity:0}}
+        @keyframes particleUp{0%{transform:translateY(0) scale(1);opacity:1}100%{transform:translateY(-210px) scale(.3) rotate(360deg);opacity:0}}
+        @keyframes twinkle{0%{opacity:.12}100%{opacity:.8}}
+      `}</style>
+
+      <Particulas ativo={parts}/>
+      <XpBurst val={xpVal} show={showXp}/>
+      {showCombo&&<ComboBadge count={combo} faixa={faixa}/>}
+
+      {/* Moldura de telemóvel */}
+      <div style={{width:375,maxWidth:'100%',background:'#1A1A2E',borderRadius:46,padding:10,
+        boxShadow:'0 32px 90px rgba(0,0,0,.95),inset 0 0 0 1px rgba(251,191,36,.1)'}}>
+        <div style={{background:'#111',borderRadius:'14px 14px 0 0',height:28,display:'flex',
+          alignItems:'center',justifyContent:'center'}}>
+          <div style={{width:72,height:6,background:'#1A1A2E',borderRadius:8}}/>
+        </div>
+        <div style={{background:'#0F172A',borderRadius:'0 0 8px 8px',height:665,
+          overflow:'hidden',display:'flex',flexDirection:'column',position:'relative'}}>
+          <div key={tela+jogoAtual} style={{flex:1,display:'flex',flexDirection:'column',
+            overflow:'hidden',animation:'slideIn .22s ease both'}}>
+            {tela==='cadastro'&&(
+              <Cadastro onEntrar={(n,av,f)=>{
+                const sc = Dados.calcStreak(dadosInicio);
+                setStreak(sc.streak);
+                const novoDados = { xp, streak: sc.streak, lastDay: sc.lastDay, mundos: mundosData, perfil: n, avatar: av, faixa: f };
+                Dados.save(novoDados);
+                setPerfil(n); setAvatar(av); setFaixa(f); setTela('hub');
+              }}/>
+            )}
+            {tela==='hub'&&(
+              <Hub xp={xp} streak={streak} perfil={perfil} avatar={avatar}
+                faixa={faixa} mundosData={mundosData}
+                onMundo={(m)=>{setMundoAtual(m);setTela('mundo');}}
+                onLogout={()=>{
+                  Dados.save({...Dados.load(), perfil:'', avatar:'🦉'});
+                  setPerfil(''); setAvatar('🦉'); setTela('cadastro');
+                }}/>
+            )}
+            {tela==='mundo'&&mundoAtual&&(
+              <MenuMundo mundo={mundoAtual} faixa={faixa}
+                estrelas={mundosData[mundoAtual.id]||0}
+                onJogo={(id)=>{setJogoAtual(id);setCombo(0);setTela('jogo');}}
+                onVoltar={()=>setTela('hub')}/>
+            )}
+            {tela==='jogo'&&jogoRender}
+          </div>
+        </div>
+        <div style={{background:'#111',borderRadius:'0 0 36px 36px',height:22,display:'flex',
+          alignItems:'center',justifyContent:'center'}}>
+          <div style={{width:82,height:4,background:'#1A1A2E',borderRadius:4}}/>
+        </div>
+      </div>
+      <p style={{marginTop:12,color:'rgba(255,255,255,.28)',fontFamily:'Nunito,sans-serif',
+        fontWeight:700,fontSize:'.68rem',textAlign:'center'}}>
+        Aprender+ · v2 · XP persistente · Sons · Mascote 🦉
+      </p>
+    </div>
+  );
+}
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+
+  <!-- PWA: manifest inline (não precisa de ficheiro separado) -->
+  <script>
+    // Gerar manifest como blob URL
+    const manifest = {
+      name: "Aprender+",
+      short_name: "Aprender+",
+      description: "App educativo para crianças 4–8 anos",
+      start_url: "./",
+      display: "standalone",
+      background_color: "#030712",
+      theme_color: "#10B981",
+      orientation: "portrait",
+      icons: [
+        { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%2310B981'/%3E%3Ctext x='96' y='130' text-anchor='middle' font-size='110'%3E🦉%3C/text%3E%3C/svg%3E", sizes: "192x192", type: "image/svg+xml" },
+        { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%2310B981'/%3E%3Ctext x='256' y='340' text-anchor='middle' font-size='300'%3E🦉%3C/text%3E%3C/svg%3E", sizes: "512x512", type: "image/svg+xml" }
+      ]
+    };
+    const blob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+    const manifestURL = URL.createObjectURL(blob);
+    document.querySelector('link[rel="manifest"]').href = manifestURL;
+
+    // Registar Service Worker básico (cache offline)
+    if ('serviceWorker' in navigator) {
+      const swCode = `
+        const CACHE='aprender-plus-v2';
+        const SHELL=['./'];
+        self.addEventListener('install', e => {
+          e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
+          self.skipWaiting();
+        });
+        self.addEventListener('activate', e => {
+          e.waitUntil(caches.keys().then(keys =>
+            Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))
+          ));
+          self.clients.claim();
+        });
+        self.addEventListener('fetch', e => {
+          e.respondWith(
+            caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('./')))
+          );
+        });
+      `;
+      const swBlob = new Blob([swCode], {type:'text/javascript'});
+      const swURL  = URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swURL).catch(()=>{});
+    }
+  </script>
+</body>
+</html>
