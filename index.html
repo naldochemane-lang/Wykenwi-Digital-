@@ -193,7 +193,7 @@
   </div>
 
   <!-- Banner Offline -->
-  <div id="offline-banner">📶 Modo offline — algumas funções podem não estar disponíveis</div>
+  <div id="offline-banner">📶 Modo offline — o teu progresso fica guardado neste dispositivo</div>
 
   <!-- Banner PWA -->
   <div id="pwa-banner">
@@ -1928,7 +1928,7 @@ function MenuMundo({ mundo, onJogo, onVoltar, estrelas, faixa }) {
 /* ═══════════════════════════════════════════════════════════════
    HUB (escolha de mundo) — Menu Principal Adaptativo
 ═══════════════════════════════════════════════════════════════ */
-function Hub({ xp, streak, onMundo, perfil, avatar, faixa, mundosData, onLogout, onSync, syncStatus }) {
+function Hub({ xp, streak, onMundo, perfil, avatar, faixa, mundosData, daily, onLogout, onSync, onParent, syncStatus }) {
     const F = FAIXAS[faixa];
     const nivel = Math.floor(xp / F.maxXpNivel) + 1;
     const isKids = faixa === 'young';
@@ -2061,6 +2061,19 @@ function Hub({ xp, streak, onMundo, perfil, avatar, faixa, mundosData, onLogout,
                     fontSize: '.82rem', flexShrink: 0,
                     boxShadow: `0 3px 0 ${m.cor}33`,
                 } }, "\u2192"))))),
+        React.createElement("div", { style: {
+                background: isKids ? '#FFF7ED' : 'rgba(249,115,22,.12)',
+                borderRadius: 20, padding: '12px 14px', marginTop: 6, flexShrink: 0,
+                border: `2px solid ${isKids ? '#FED7AA' : 'rgba(249,115,22,.35)'}`,
+            } },
+            React.createElement("div", { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 } },
+                React.createElement("div", { style: { color: isKids ? '#C2410C' : '#FDBA74', fontWeight:900, fontSize:'.9rem' } }, "🎯 Missão de hoje"),
+                React.createElement("div", { style: { color: isKids ? '#64748B' : 'rgba(255,255,255,.65)', fontWeight:800, fontSize:'.72rem' } }, `${Math.min(daily?.activities || 0, 3)}/3 actividades`)),
+            React.createElement("div", { style: { color: isKids ? '#64748B' : 'rgba(255,255,255,.65)', fontWeight:700, fontSize:'.75rem', marginBottom:7 } },
+                (daily?.activities || 0) >= 3 ? 'Missão concluída! Amanhã há uma nova aventura.' : 'Completa 3 actividades para ganhar um prémio de consistência.'),
+            React.createElement("div", { style: { height:7, borderRadius:9, background:isKids ? '#FED7AA' : 'rgba(255,255,255,.14)', overflow:'hidden' } },
+                React.createElement("div", { style: { height:'100%', width:`${Math.min(((daily?.activities || 0)/3)*100,100)}%`, background:'#F97316', borderRadius:9, transition:'width .4s' } }))),
+        React.createElement("button", { onClick:onParent, style: { width:'100%', borderRadius:14, padding:'9px 12px', marginTop:7, border:`2px solid ${isKids ? '#CBD5E1' : 'rgba(255,255,255,.2)'}`, background:isKids ? '#FFFFFF' : 'rgba(255,255,255,.06)', color:isKids ? '#475569' : '#E2E8F0', fontFamily:'inherit', fontWeight:900, cursor:'pointer' } }, "🔐 Área dos pais"),
         React.createElement("div", { style: {
                 background: isKids ? '#FFFFFF' : 'rgba(255,255,255,.07)',
                 borderRadius: 20, padding: '10px 16px',
@@ -2595,6 +2608,34 @@ function App() {
             : React.createElement(Cadastro, { onEntrar: criarPerfil, onVoltar: ()=>setTela('perfis') })
     );
 }
+function PainelParental({ perfil, faixa, xp, streak, mundosData, daily, onVoltar }) {
+    const [fase, setFase] = useState('pin');
+    const [pin, setPin] = useState('');
+    const [erro, setErro] = useState('');
+    const confirmar = () => {
+        if (hashPin(pin) === perfil.pinHash) { setFase('dados'); setErro(''); }
+        else { setErro('PIN incorrecto.'); setPin(''); }
+    };
+    const mundos = faixa === 'young' ? MUNDOS_YOUNG : MUNDOS_OLDER;
+    const total = mundos.reduce((a,m) => a + (mundosData[m.id] || 0), 0);
+    const melhor = [...mundos].sort((a,b) => (mundosData[b.id]||0) - (mundosData[a.id]||0))[0];
+    const precisa = [...mundos].sort((a,b) => (mundosData[a.id]||0) - (mundosData[b.id]||0))[0];
+    const card = { background:'#fff', borderRadius:18, padding:'12px 14px', border:'2px solid #E2E8F0', boxShadow:'0 4px 0 #E2E8F0' };
+    if (fase === 'pin') return React.createElement('div',{style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,background:'linear-gradient(160deg,#1E1B4B,#312E81)',color:'#fff'}},
+        React.createElement('div',{style:{fontSize:'3rem'}},'🔐'),
+        React.createElement('h2',{style:{fontFamily:"'Baloo 2',cursive",margin:'8px 0'}},'Área dos pais'),
+        React.createElement('p',{style:{fontFamily:'Nunito,sans-serif',fontSize:'.8rem',opacity:.7,textAlign:'center'}},'Introduz o PIN criado para este perfil.'),
+        React.createElement('input',{type:'password',inputMode:'numeric',maxLength:4,value:pin,onChange:e=>setPin(e.target.value.replace(/\\D/g,'').slice(0,4)),onKeyDown:e=>e.key==='Enter'&&confirmar(),placeholder:'••••',style:{width:150,textAlign:'center',letterSpacing:10,fontSize:'1.6rem',padding:12,borderRadius:14,border:'none',margin:'12px 0'}}),
+        erro && React.createElement('div',{style:{color:'#FCA5A5',fontFamily:'Nunito,sans-serif',fontWeight:800,marginBottom:8}},erro),
+        React.createElement('button',{onClick:confirmar,disabled:pin.length!==4,style:{padding:'12px 28px',border:0,borderRadius:14,background:'#F97316',color:'#fff',fontFamily:'inherit',fontWeight:900,cursor:'pointer'}},'Ver progresso'),
+        React.createElement('button',{onClick:onVoltar,style:{marginTop:15,background:'none',border:0,color:'rgba(255,255,255,.55)',fontFamily:'Nunito,sans-serif',cursor:'pointer'}},'← Voltar'));
+    return React.createElement('div',{style:{flex:1,overflowY:'auto',padding:18,background:'linear-gradient(160deg,#F8FAFC,#EEF2FF)',fontFamily:"'Nunito',sans-serif"}},
+        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},React.createElement('div',null,React.createElement('div',{style:{fontSize:'.75rem',color:'#64748B',fontWeight:800}},'PROGRESSO DE'),React.createElement('h2',{style:{margin:0,color:'#1E293B',fontFamily:"'Baloo 2',cursive"}},perfil.nome)),React.createElement('button',{onClick:onVoltar,style:{border:0,borderRadius:12,padding:'8px 12px',background:'#fff',color:'#64748B',fontWeight:900,cursor:'pointer'}},'Fechar')),
+        React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}},React.createElement('div',{style:card},React.createElement('div',{style:{fontSize:'1.4rem'}},'⭐'),React.createElement('b',null, xp+' XP'),React.createElement('div',{style:{fontSize:'.72rem',color:'#64748B'}},'experiência')),React.createElement('div',{style:card},React.createElement('div',{style:{fontSize:'1.4rem'}},'🔥'),React.createElement('b',null, streak+' dias'),React.createElement('div',{style:{fontSize:'.72rem',color:'#64748B'}},'sequência actual'))),
+        React.createElement('div',{style:{...card,marginTop:10}},React.createElement('b',{style:{color:'#1E293B'}},'Missão diária'),React.createElement('div',{style:{color:'#64748B',fontSize:'.8rem',marginTop:5}},`${Math.min(daily?.activities||0,3)}/3 actividades concluídas hoje`)),
+        React.createElement('div',{style:{...card,marginTop:10}},React.createElement('b',{style:{color:'#1E293B'}},'Áreas praticadas'),React.createElement('div',{style:{color:'#64748B',fontSize:'.8rem',marginTop:5}},total+' pontos acumulados em '+mundos.length+' áreas.'),React.createElement('div',{style:{marginTop:9,display:'grid',gap:7}},mundos.map(m=>React.createElement('div',{key:m.id},React.createElement('div',{style:{display:'flex',justifyContent:'space-between',fontSize:'.72rem',fontWeight:800,color:'#475569'}},React.createElement('span',null,m.emoji+' '+m.nome),React.createElement('span',null,(mundosData[m.id]||0)+' pts')),React.createElement('div',{style:{height:6,background:'#E2E8F0',borderRadius:8}},React.createElement('div',{style:{height:'100%',width:`${Math.min(((mundosData[m.id]||0)/m.max)*100,100)}%`,background:m.cor,borderRadius:8}}))))),
+        React.createElement('div',{style:{...card,marginTop:10,color:'#475569',fontSize:'.8rem'}},'Sugestão: praticar mais ',React.createElement('b',null,precisa?.nome||'uma actividade'),' e continuar a reforçar ',React.createElement('b',null,melhor?.nome||'as competências actuais'),'.'));
+}
 function AppJogo({ perfilSelecionado, onLogout }) {
     const storageKey = `lerbem_v1_${perfilSelecionado.id}`;
     const faixaInicial = perfilSelecionado.faixa || 'young';
@@ -2615,7 +2656,27 @@ function AppJogo({ perfilSelecionado, onLogout }) {
     const [faixa, setFaixa] = useState(dadosInicio.faixa || 'young');
     const [xp, setXp] = useState(dadosInicio.xp || 0);
     const [streak, setStreak] = useState(dadosInicio.streak || 0);
+    const [lastDay, setLastDay] = useState(dadosInicio.lastDay || null);
+    const hojeInicial = new Date().toISOString().slice(0,10);
+    const [daily, setDaily] = useState(() => (dadosInicio.daily && dadosInicio.daily.date === hojeInicial) ? dadosInicio.daily : { date: hojeInicial, activities: 0 });
+    const [parental, setParental] = useState(false);
     const [mundosData, setMundosData] = useState(dadosInicio.mundos || {});
+    // Streak baseada em dias civis locais, e não em blocos de 24 horas.
+    const diaLocal = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    };
+    const diaAnterior = (dia) => {
+        const d = new Date(`${dia}T12:00:00`);
+        d.setDate(d.getDate() - 1);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    };
+    useEffect(() => {
+        const hoje = diaLocal();
+        const anterior = diaAnterior(hoje);
+        setStreak(prev => lastDay === hoje ? Math.max(prev, 1) : lastDay === anterior ? prev + 1 : 1);
+        setLastDay(hoje);
+    }, []);
     const [mundoAtual, setMundoAtual] = useState(null);
     const [jogoAtual, setJogoAtual] = useState(null);
     const [showXp, setShowXp] = useState(false);
@@ -2627,7 +2688,7 @@ function AppJogo({ perfilSelecionado, onLogout }) {
     // ── Guardar sempre que XP ou mundos mudam ────────────────
     // Guardar por perfil individual
     const saveData = (overrides = {}) => {
-        const dados = Object.assign({ xp, streak, lastDay: dadosInicio.lastDay, mundos: mundosData, perfil, avatar, faixa, lastModified: Date.now() }, overrides);
+        const dados = Object.assign({ xp, streak, lastDay, daily, mundos: mundosData, perfil, avatar, faixa, lastModified: Date.now() }, overrides);
         try { localStorage.setItem(storageKey, JSON.stringify(dados)); } catch (_a) { }
         // 🔥 Firebase sync automático (silencioso)
         if (typeof FB !== 'undefined') FB.salvar(perfilSelecionado.id, dados).catch(() => {});
@@ -2682,7 +2743,7 @@ function AppJogo({ perfilSelecionado, onLogout }) {
         if (!perfil)
             return;
         saveData();
-    }, [xp, mundosData]);
+    }, [xp, mundosData, streak, lastDay, daily, perfil, avatar, faixa]);
     // ── Mascote ao entrar no hub ──────────────────────────────
     useEffect(() => {
         if (tela === 'hub')
@@ -2704,7 +2765,7 @@ function AppJogo({ perfilSelecionado, onLogout }) {
         Mascote.acerto();
         setXp(x => {
             const novo = x + val;
-            const dados = { xp: novo, streak, lastDay: dadosInicio.lastDay, mundos: mundosData, perfil, avatar, faixa };
+            const dados = { xp: novo, streak, lastDay, mundos: mundosData, perfil, avatar, faixa, lastModified: Date.now() };
             try {
                 localStorage.setItem(storageKey, JSON.stringify(dados));
             }
@@ -2742,7 +2803,11 @@ function AppJogo({ perfilSelecionado, onLogout }) {
                 return novo;
             });
     }, [mundoAtual, streak, perfil, avatar, faixa]);
-    const props = { onFim: () => setTela('mundo'), onXp: ganharXp, faixa };
+    const terminarJogo = () => {
+        setDaily(d => ({ ...d, activities: Math.min((d.activities || 0) + 1, 3), lastPlayed: Date.now() }));
+        setTela('mundo');
+    };
+    const props = { onFim: terminarJogo, onXp: ganharXp, faixa };
     const JOGOS_YOUNG = {
         abc: () => React.createElement(JogoABC_Young, Object.assign({}, props)),
         vogais: () => React.createElement(JogoVogais_Young, Object.assign({}, props)),
@@ -2798,7 +2863,8 @@ function AppJogo({ perfilSelecionado, onLogout }) {
                     overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' } },
                 React.createElement("div", { key: tela + jogoAtual, style: { flex: 1, display: 'flex', flexDirection: 'column',
                         overflow: 'hidden', animation: 'slideIn .22s ease both' } },
-                    tela === 'hub' && (React.createElement(Hub, { xp: xp, streak: streak, perfil: perfil, avatar: avatar, faixa: faixa, mundosData: mundosData, onMundo: (m) => { setMundoAtual(m); setTela('mundo'); }, onLogout: onLogout, onSync: sincronizar, syncStatus: syncStatus })),
+                    parental && (React.createElement(PainelParental, { perfil: perfilSelecionado, faixa: faixa, xp: xp, streak: streak, mundosData: mundosData, daily: daily, onVoltar: () => setParental(false) })),
+                    !parental && tela === 'hub' && (React.createElement(Hub, { xp: xp, streak: streak, perfil: perfil, avatar: avatar, faixa: faixa, mundosData: mundosData, daily: daily, onMundo: (m) => { setMundoAtual(m); setTela('mundo'); }, onLogout: onLogout, onParent: () => setParental(true), onSync: sincronizar, syncStatus: syncStatus })),
                     tela === 'mundo' && mundoAtual && (React.createElement(MenuMundo, { mundo: mundoAtual, faixa: faixa, estrelas: mundosData[mundoAtual.id] || 0, onJogo: (id) => { setJogoAtual(id); setCombo(0); setTela('jogo'); }, onVoltar: () => setTela('hub') })),
                     tela === 'jogo' && jogoRender)),
             React.createElement("div", { style: { background: '#111', borderRadius: '0 0 36px 36px', height: 22, display: 'flex',
