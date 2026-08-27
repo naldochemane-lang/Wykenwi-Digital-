@@ -1,15 +1,15 @@
 {
-  "name": "LerBem",
+  "name": "LerBem · Universo Pedagógico",
   "short_name": "LerBem",
-  "description": "App educativo para crianças 4–8 anos",
-  "start_url": "./",
+  "description": "Actividades educativas em português europeu para crianças dos 4 aos 8 anos.",
+  "lang": "pt-PT",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#030712",
-  "theme_color": "#030712",
-  "orientation": "portrait",
+  "theme_color": "#F97316",
+  "orientation": "portrait-primary",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {"src": "./icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable"},
+    {"src": "./icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable"}
   ]
 }
