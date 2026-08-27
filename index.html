@@ -216,6 +216,7 @@
 
   <div id="root"></div>
   <script>
+window.addEventListener('error', e => console.error('[BOOT-ERROR]', e.message, e.filename, e.lineno, e.error && e.error.stack));
 "use strict";
 const { useState, useEffect, useCallback, useRef } = React;
 /* ═══════════════════════════════════════════════════════════════════
@@ -2285,7 +2286,7 @@ function Cadastro({ onEntrar, onVoltar }) {
                         boxShadow: avatar === i ? `0 4px 0 ${F.sombra}55` : 'none' } }, a)))),
                 React.createElement("div", { style: { textAlign: 'center', fontSize: '2.6rem', marginBottom: 12,
                         animation: 'mascotBreathe 3s ease-in-out infinite' } }, avatares[avatar]),
-                React.createElement("button", { onClick: () => setPasso(3), style: { width: '100%', padding: '13px', borderRadius: 16, border: 'none',
+                React.createElement("button", { onClick: () => onEntrar(nome.trim(), avatares[avatar], faixaAuto, ''), style: { width: '100%', padding: '13px', borderRadius: 16, border: 'none',
                         background: `linear-gradient(135deg,${F.cor},${F.sombra})`,
                         color: '#fff', fontFamily: "'Baloo 2',cursive", fontWeight: 900, fontSize: '1.1rem',
                         cursor: 'pointer', boxShadow: `0 6px 0 ${F.sombra}`, transition: 'all .25s' } }, "Continuar →")))),
@@ -2355,8 +2356,17 @@ const mostrarToastNivel = (n) => {
 ═══════════════════════════════════════════════════════════════ */
 const PERFIS_KEY = 'lerbem_perfis_v2';
 const carregarPerfisLocal = () => {
-    try { return JSON.parse(localStorage.getItem(PERFIS_KEY) || '[]'); }
-    catch(_){ return []; }
+    const iniciais = [
+        { id: 'kenny_4_6', nome: 'Kenny', idade: 5, avatar: '🐣', faixa: 'young', pinHash: '' },
+        { id: 'wyston_7_8', nome: 'Wyston', idade: 7, avatar: '🦅', faixa: 'older', pinHash: '' },
+    ];
+    try {
+        const guardados = JSON.parse(localStorage.getItem(PERFIS_KEY) || '[]');
+        const lista = Array.isArray(guardados) ? guardados : [];
+        iniciais.forEach(base => { if (!lista.some(p => p.id === base.id)) lista.unshift(base); });
+        localStorage.setItem(PERFIS_KEY, JSON.stringify(lista));
+        return lista;
+    } catch(_) { return iniciais; }
 };
 const guardarPerfisLocal = (lista) => {
     try { localStorage.setItem(PERFIS_KEY, JSON.stringify(lista)); } catch(_){}
@@ -2519,7 +2529,7 @@ function EcranPerfis({ onSelecionar, onNovoPerfil }) {
             perfis.map(p => {
                 const F = FAIXAS[p.faixa || 'young'];
                 return React.createElement('div',{key:p.id,
-                    onClick:()=>{ setPinTarget(p); setPinDigits(''); setPinErro(false); },
+                    onClick:()=>onSelecionar(p),
                     style:{
                         background:`linear-gradient(135deg,${F.cor}22,rgba(255,255,255,.06))`,
                         border:`2.5px solid ${F.cor}66`,
@@ -2538,8 +2548,6 @@ function EcranPerfis({ onSelecionar, onNovoPerfil }) {
                         color:'#fff',marginTop:6,lineHeight:1.2}}, p.nome),
                     React.createElement('div',{style:{fontFamily:'Nunito,sans-serif',fontWeight:700,fontSize:'.68rem',
                         color:F.cor,marginTop:4}}, F.label),
-                    React.createElement('div',{style:{marginTop:5,fontSize:'.65rem',color:'rgba(255,255,255,.4)',
-                        fontFamily:'Nunito,sans-serif',fontWeight:700}}, '🔐 PIN')
                 );
             })
         ),
@@ -2609,7 +2617,7 @@ function App() {
     );
 }
 function PainelParental({ perfil, faixa, xp, streak, mundosData, daily, onVoltar }) {
-    const [fase, setFase] = useState('pin');
+    const [fase, setFase] = useState('dados');
     const [pin, setPin] = useState('');
     const [erro, setErro] = useState('');
     const confirmar = () => {
@@ -2630,10 +2638,14 @@ function PainelParental({ perfil, faixa, xp, streak, mundosData, daily, onVoltar
         React.createElement('button',{onClick:confirmar,disabled:pin.length!==4,style:{padding:'12px 28px',border:0,borderRadius:14,background:'#F97316',color:'#fff',fontFamily:'inherit',fontWeight:900,cursor:'pointer'}},'Ver progresso'),
         React.createElement('button',{onClick:onVoltar,style:{marginTop:15,background:'none',border:0,color:'rgba(255,255,255,.55)',fontFamily:'Nunito,sans-serif',cursor:'pointer'}},'← Voltar'));
     return React.createElement('div',{style:{flex:1,overflowY:'auto',padding:18,background:'linear-gradient(160deg,#F8FAFC,#EEF2FF)',fontFamily:"'Nunito',sans-serif"}},
-        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},React.createElement('div',null,React.createElement('div',{style:{fontSize:'.75rem',color:'#64748B',fontWeight:800}},'PROGRESSO DE'),React.createElement('h2',{style:{margin:0,color:'#1E293B',fontFamily:"'Baloo 2',cursive"}},perfil.nome)),React.createElement('button',{onClick:onVoltar,style:{border:0,borderRadius:12,padding:'8px 12px',background:'#fff',color:'#64748B',fontWeight:900,cursor:'pointer'}},'Fechar')),
-        React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}},React.createElement('div',{style:card},React.createElement('div',{style:{fontSize:'1.4rem'}},'⭐'),React.createElement('b',null, xp+' XP'),React.createElement('div',{style:{fontSize:'.72rem',color:'#64748B'}},'experiência')),React.createElement('div',{style:card},React.createElement('div',{style:{fontSize:'1.4rem'}},'🔥'),React.createElement('b',null, streak+' dias'),React.createElement('div',{style:{fontSize:'.72rem',color:'#64748B'}},'sequência actual'))),
-        React.createElement('div',{style:{...card,marginTop:10}},React.createElement('b',{style:{color:'#1E293B'}},'Missão diária'),React.createElement('div',{style:{color:'#64748B',fontSize:'.8rem',marginTop:5}},`${Math.min(daily?.activities||0,3)}/3 actividades concluídas hoje`)),
-        React.createElement('div',{style:{...card,marginTop:10}},React.createElement('b',{style:{color:'#1E293B'}},'Áreas praticadas'),React.createElement('div',{style:{color:'#64748B',fontSize:'.8rem',marginTop:5}},total+' pontos acumulados em '+mundos.length+' áreas.'),React.createElement('div',{style:{marginTop:9,display:'grid',gap:7}},mundos.map(m=>React.createElement('div',{key:m.id},React.createElement('div',{style:{display:'flex',justifyContent:'space-between',fontSize:'.72rem',fontWeight:800,color:'#475569'}},React.createElement('span',null,m.emoji+' '+m.nome),React.createElement('span',null,(mundosData[m.id]||0)+' pts')),React.createElement('div',{style:{height:6,background:'#E2E8F0',borderRadius:8}},React.createElement('div',{style:{height:'100%',width:`${Math.min(((mundosData[m.id]||0)/m.max)*100,100)}%`,background:m.cor,borderRadius:8}}))))),
+        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+            React.createElement('h2',{style:{margin:0,color:'#1E293B',fontFamily:"'Baloo 2',cursive"}},'Progresso de '+perfil.nome),
+            React.createElement('button',{onClick:onVoltar,style:{border:0,borderRadius:12,padding:'8px 12px',background:'#fff',color:'#64748B',fontWeight:900,cursor:'pointer'}},'Fechar')),
+        React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}},
+            React.createElement('div',{style:card},React.createElement('b',null,xp+' XP'),React.createElement('div',{style:{fontSize:'.72rem',color:'#64748B'}},'experiência')),
+            React.createElement('div',{style:card},React.createElement('b',null,streak+' dias'),React.createElement('div',{style:{fontSize:'.72rem',color:'#64748B'}},'sequência actual'))),
+        React.createElement('div',{style:{...card,marginTop:10}},React.createElement('b',null,'Missão diária'),React.createElement('div',{style:{color:'#64748B',fontSize:'.8rem',marginTop:5}},`${Math.min(daily?.activities||0,3)}/3 actividades concluídas hoje`)),
+        React.createElement('div',{style:{...card,marginTop:10}},React.createElement('b',null,'Áreas praticadas'),React.createElement('div',{style:{color:'#64748B',fontSize:'.8rem',marginTop:5}},total+' pontos acumulados.'),React.createElement('div',{style:{marginTop:8}},linhas)),
         React.createElement('div',{style:{...card,marginTop:10,color:'#475569',fontSize:'.8rem'}},'Sugestão: praticar mais ',React.createElement('b',null,precisa?.nome||'uma actividade'),' e continuar a reforçar ',React.createElement('b',null,melhor?.nome||'as competências actuais'),'.'));
 }
 function AppJogo({ perfilSelecionado, onLogout }) {
